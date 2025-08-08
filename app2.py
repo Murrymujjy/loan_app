@@ -143,8 +143,8 @@ st.markdown("""
 - Fewer recent inquiries and delinquencies improve approval chances.
 """)
 
-from transformers import pipeline
-import streamlit as st
+# from transformers import pipeline
+# import streamlit as st
 
 @st.cache_resource
 def get_chatbot():

@@ -143,21 +143,24 @@ st.markdown("""
 - Fewer recent inquiries and delinquencies improve approval chances.
 """)
 
-# Chatbot section
-st.subheader("💬 Ask Our Chatbot")
+from transformers import pipeline
+import streamlit as st
+
 @st.cache_resource
 def get_chatbot():
-    return pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.1", 
-                    token=st.secrets["HF_TOKEN"])
+    # Public model, no token required
+    return pipeline("text2text-generation", model="google/flan-t5-small")
 
-try:
-    chatbot = get_chatbot()
-    chat_input = st.text_input("Ask something about loan prediction or finance:")
-    if chat_input:
-        result = chatbot(chat_input, max_new_tokens=100)[0]["generated_text"]
-        st.markdown(f"**Chatbot:** {result}")
-except Exception as e:
-    st.warning("Chatbot is currently unavailable. Please check your HuggingFace token or internet connection.")
+chatbot = get_chatbot()
+
+# Chat UI
+st.subheader("💬 Loan Advisor Chatbot")
+user_input = st.text_input("Ask me anything about your loan or prediction:", key="chat")
+
+if user_input:
+    with st.spinner("Thinking..."):
+        response = chatbot(user_input, max_length=200, do_sample=True)[0]["generated_text"]
+        st.markdown(f"**Bot:** {response}")
 
 # Footer
 st.markdown("---")

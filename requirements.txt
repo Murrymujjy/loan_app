@@ -1,0 +1,13 @@
+---
+
+## 📌 Requirements
+
+- Python 3.8+
+- Streamlit
+- Pandas, NumPy
+- Scikit-learn
+- LightGBM
+- XGBoost
+- Joblib
+
+---

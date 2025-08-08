@@ -1,13 +1,8 @@
----
-
-## 📌 Requirements
-
-- Python 3.8+
-- Streamlit
-- Pandas, NumPy
-- Scikit-learn
-- LightGBM
-- XGBoost
-- Joblib
-
----
+streamlit
+pandas
+numpy
+scikit-learn
+joblib
+lightgbm
+xgboost
+matplotlib

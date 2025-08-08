@@ -1,9 +1,11 @@
 streamlit
 pandas
+numpy
+joblib
 scikit-learn
-shap
 lightgbm
 xgboost
 matplotlib
-joblib
+shap
 transformers
+plotly

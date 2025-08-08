@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, accuracy_score
 
 # Load trained models
-logreg = joblib.load("models/logistic_regression_model.joblib")
-dt = joblib.load("models/decision_tree_model.joblib")
-rf = joblib.load("models/random_forest_model.joblib")
-lgbm = joblib.load("models/lightgbm_model.joblib")
-xgb = joblib.load("models/xgboost_model.joblib")
+logreg = joblib.load("logistic_regression_model.joblib")
+dt = joblib.load("decision_tree_model.joblib")
+rf = joblib.load("random_forest_model.joblib")
+lgbm = joblib.load("lightgbm_model.joblib")
+xgb = joblib.load("xgboost_model.joblib")
 
 models = {
     "Logistic Regression": logreg,

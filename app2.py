@@ -1,14 +1,58 @@
-# Final Enhanced Loan Approval Prediction App
-
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
 import shap
 import matplotlib.pyplot as plt
+import streamlit.components.v1 as components
+from sklearn.preprocessing import LabelEncoder
 from transformers import pipeline
-import numpy as np
 
-# Load Models
+# Set Streamlit page config
+st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
+
+# Set background color and header
+st.markdown("""
+    <style>
+    body {
+        background-color: #f5f7fa;
+        color: #333;
+    }
+    .main {
+        background-color: #ffffff;
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .stApp {
+        padding: 2rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Title
+st.title("💰 Loan Approval Prediction System")
+st.markdown("An intelligent system to predict loan approval using multiple ML models.")
+
+# Feature meanings
+with st.expander("🧠 Feature Descriptions"):
+    st.markdown("""
+    - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
+    - **purpose**: The purpose of the loan (debt consolidation, educational, etc.).
+    - **int.rate**: Interest rate of the loan.
+    - **installment**: Monthly payment for the loan.
+    - **log.annual.inc**: Natural log of the annual income.
+    - **dti**: Debt-to-income ratio.
+    - **fico**: FICO credit score.
+    - **days.with.cr.line**: Number of days with credit line open.
+    - **revol.bal**: Revolving balance (amount unpaid on credit card).
+    - **revol.util**: Revolving line utilization rate.
+    - **inq.last.6mths**: Number of inquiries in the last 6 months.
+    - **delinq.2yrs**: Number of times delinquent in the past 2 years.
+    - **pub.rec**: Number of derogatory public records.
+    """)
+
+# Load models
 model_files = {
     "Logistic Regression": "logistic_regression_model.joblib",
     "Decision Tree": "decision_tree_model.joblib",
@@ -18,136 +62,97 @@ model_files = {
 }
 models = {name: joblib.load(path) for name, path in model_files.items()}
 
-# SHAP Explainers (only for tree-based models)
-shap_explainers = {
-    name: shap.TreeExplainer(model)
-    for name, model in models.items()
-    if name in ["Random Forest", "LightGBM", "XGBoost"]
-}
-
-# Purpose Encoding
+# Purpose mapping
 purpose_mapping = {
-    'Debt Consolidation': 0,
-    'Credit Card': 1,
-    'Home Improvement': 2,
-    'Major Purchase': 3,
-    'Small Business': 4,
-    'Educational': 5,
-    'All Other': 6
+    'credit_card': 0, 'debt_consolidation': 1, 'educational': 2,
+    'home_improvement': 3, 'major_purchase': 4, 'small_business': 5,
+    'all_other': 6
 }
 
-# Feature Descriptions
-def display_feature_info():
-    st.markdown("### 🔍 Feature Descriptions")
-    st.markdown("""
-    - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
-    - **purpose**: Reason for the loan (e.g. Debt Consolidation, Major Purchase).
-    - **int.rate**: Interest rate on the loan.
-    - **installment**: Monthly installment paid by the borrower.
-    - **log.annual.inc**: Natural log of the self-reported annual income.
-    - **dti**: Debt-to-income ratio.
-    - **fico**: FICO credit score.
-    - **days.with.cr.line**: Number of days the borrower has had a credit line.
-    - **revol.bal**: Revolving balance on credit card (amount unpaid at end of month).
-    - **revol.util**: Revolving line utilization rate (credit used vs. total available).
-    - **inq.last.6mths**: Number of inquiries in the last 6 months.
-    - **delinq.2yrs**: Number of times borrower was 30+ days past due in the last 2 years.
-    - **pub.rec**: Number of derogatory public records.
-    """)
+# Sidebar input form
+st.sidebar.header("📋 Input Borrower Information")
+user_input = {
+    "credit.policy": st.sidebar.selectbox("Credit Policy", [0, 1]),
+    "purpose": st.sidebar.selectbox("Purpose", list(purpose_mapping.keys())),
+    "int.rate": st.sidebar.slider("Interest Rate", 0.05, 0.30, 0.12),
+    "installment": st.sidebar.slider("Installment", 50.0, 1000.0, 250.0),
+    "log.annual.inc": st.sidebar.slider("Log Annual Income", 8.0, 12.0, 10.0),
+    "dti": st.sidebar.slider("Debt-to-Income Ratio", 0.0, 40.0, 18.0),
+    "fico": st.sidebar.slider("FICO Score", 300, 850, 700),
+    "days.with.cr.line": st.sidebar.slider("Days with Credit Line", 1000, 8000, 4000),
+    "revol.bal": st.sidebar.slider("Revolving Balance", 0, 100000, 15000),
+    "revol.util": st.sidebar.slider("Revolving Utilization (%)", 0.0, 100.0, 45.0),
+    "inq.last.6mths": st.sidebar.slider("Inquiries Last 6 Months", 0, 10, 1),
+    "delinq.2yrs": st.sidebar.slider("Delinquencies Last 2 Years", 0, 5, 0),
+    "pub.rec": st.sidebar.slider("Public Records", 0, 5, 0)
+}
 
-# Hugging Face chatbot setup
+# Prepare input DataFrame
+input_df = pd.DataFrame([user_input])
+input_df['purpose'] = input_df['purpose'].map(purpose_mapping)
+
+# Model selection
+st.sidebar.markdown("---")
+selected_model_name = st.sidebar.selectbox("Select Model", list(model_files.keys()))
+selected_model = models[selected_model_name]
+
+# Predict
+if st.sidebar.button("Predict"):
+    prediction = selected_model.predict(input_df)[0]
+    proba = selected_model.predict_proba(input_df)[0][1]
+
+    # Show prediction
+    st.subheader("🎯 Prediction Result")
+    st.markdown(f"**Prediction:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
+    st.markdown(f"**Probability of Approval:** {round(proba * 100, 2)}%")
+
+    # Gauge meter using plotly
+    import plotly.graph_objects as go
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=round(proba * 100, 2),
+        title={'text': "Approval Probability"},
+        gauge={'axis': {'range': [None, 100]},
+               'bar': {'color': "green" if proba >= 0.5 else "red"},
+               'steps': [
+                   {'range': [0, 50], 'color': '#ffdddd'},
+                   {'range': [50, 100], 'color': '#ddffdd'}]}))
+    st.plotly_chart(fig, use_container_width=True)
+
+    # SHAP explanation
+    st.subheader("📊 SHAP Explanation")
+    explainer = shap.Explainer(selected_model)
+    shap_values = explainer(input_df)
+
+    st.markdown("**Top Features Impacting the Decision:**")
+    fig_shap_bar = shap.plots.bar(shap_values[0], show=False)
+    st.pyplot(fig_shap_bar.figure)
+
+    with st.expander("See SHAP Waterfall Explanation"):
+        fig_waterfall = shap.plots.waterfall(shap_values[0], show=False)
+        st.pyplot(fig_waterfall.figure)
+
+# Insights section
+st.subheader("📈 Insights")
+st.markdown("""
+- Interest rate and FICO score are strong indicators of loan approval.
+- High revolving balance or utilization may negatively affect approval.
+- Fewer recent inquiries and delinquencies improve approval chances.
+""")
+
+# Chatbot section
+st.subheader("💬 Ask Our Chatbot")
 @st.cache_resource
 def get_chatbot():
-    return pipeline("conversational", model="microsoft/DialoGPT-medium")
+    return pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.1", 
+                    token=st.secrets["HF_TOKEN"])
 
 chatbot = get_chatbot()
+chat_input = st.text_input("Ask something about loan prediction or finance:")
+if chat_input:
+    result = chatbot(chat_input, max_new_tokens=100)[0]["generated_text"]
+    st.markdown(f"**Chatbot:** {result}")
 
-# Page config
-st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
-
-# Sidebar Inputs
-with st.sidebar:
-    st.title("🔧 Input Features")
-    credit_policy = st.selectbox("Credit Policy", [0, 1])
-    purpose = st.selectbox("Purpose", list(purpose_mapping.keys()))
-    int_rate = st.number_input("Interest Rate", min_value=0.0, value=0.12)
-    installment = st.number_input("Installment", min_value=0.0, value=250.0)
-    log_annual_inc = st.number_input("Log Annual Income", min_value=0.0, value=10.5)
-    dti = st.number_input("Debt-to-Income Ratio", min_value=0.0, value=15.0)
-    fico = st.slider("FICO Score", min_value=300, max_value=850, value=720)
-    days_with_cr_line = st.number_input("Days with Credit Line", min_value=0.0, value=2000.0)
-    revol_bal = st.number_input("Revolving Balance", min_value=0.0, value=15000.0)
-    revol_util = st.number_input("Revolving Utilization (%)", min_value=0.0, value=45.0)
-    inq_last_6mths = st.number_input("Inquiries in Last 6 Months", min_value=0, value=1)
-    delinq_2yrs = st.number_input("Delinquencies in Last 2 Years", min_value=0, value=0)
-    pub_rec = st.number_input("Public Records", min_value=0, value=0)
-
-    selected_models = st.multiselect("Select Models for Prediction", list(models.keys()), default=list(models.keys()))
-
-# Encode and Prepare Input
-purpose_encoded = purpose_mapping.get(purpose, 6)
-input_data = pd.DataFrame([{
-    "credit.policy": credit_policy,
-    "purpose": purpose_encoded,
-    "int.rate": int_rate,
-    "installment": installment,
-    "log.annual.inc": log_annual_inc,
-    "dti": dti,
-    "fico": fico,
-    "days.with.cr.line": days_with_cr_line,
-    "revol.bal": revol_bal,
-    "revol.util": revol_util,
-    "inq.last.6mths": inq_last_6mths,
-    "delinq.2yrs": delinq_2yrs,
-    "pub.rec": pub_rec
-}])
-
-# Main UI
-st.title("🏦 Loan Approval Prediction App")
-st.markdown("#### Made with ❤️ by Team Numerixa")
-
-# Prediction Section
-with st.expander("📊 Prediction Results"):
-    if st.button("Predict"):
-        results = {}
-        for name in selected_models:
-            model = models[name]
-            prediction = model.predict(input_data)[0]
-            label = "Approved ✅" if prediction == 1 else "Not Approved ❌"
-            results[name] = label
-        st.write("### 🔮 Predictions:")
-        for model, label in results.items():
-            st.success(f"{model}: {label}")
-
-# SHAP Explanation
-with st.expander("🧠 SHAP Explanation"):
-    for name in selected_models:
-        if name in shap_explainers:
-            explainer = shap_explainers[name]
-            shap_values = explainer.shap_values(input_data)
-            st.write(f"**{name} SHAP Explanation:**")
-            fig, ax = plt.subplots()
-            shap.summary_plot(shap_values, input_data, plot_type="bar", show=False)
-            st.pyplot(fig)
-
-# Insights Section
-with st.expander("📈 Insights"):
-    st.markdown("""
-    - High FICO score usually indicates good creditworthiness.
-    - A lower DTI ratio increases chances of loan approval.
-    - Purpose of loan plays a key role in underwriting.
-    - Fewer recent credit inquiries are seen positively by lenders.
-    """)
-
-# Feature Description Section
-with st.expander("💡 Feature Guide"):
-    display_feature_info()
-
-# Chatbot Section
-with st.expander("💬 Ask the Bot (HuggingFace Chatbot)"):
-    user_question = st.text_input("Ask your loan-related question:")
-    if user_question:
-        from transformers import Conversational
-        convo = Conversational(user_question)
-        response = chatbot(convo)
-        st.info(f"🤖: {response[0].generated_responses[-1]}")
+# Footer
+st.markdown("---")
+st.markdown("<center>Made with ❤️ by Team Numerixa</center>", unsafe_allow_html=True)

@@ -1,10 +1,14 @@
+# Final Enhanced Loan Approval Prediction App
+
 import streamlit as st
 import pandas as pd
 import joblib
+import shap
+import matplotlib.pyplot as plt
+from transformers import pipeline
+import numpy as np
 
-# Set page config
-st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
-
+# Load Models
 model_files = {
     "Logistic Regression": "logistic_regression_model.joblib",
     "Decision Tree": "decision_tree_model.joblib",
@@ -14,7 +18,14 @@ model_files = {
 }
 models = {name: joblib.load(path) for name, path in model_files.items()}
 
-# Purpose encoding
+# SHAP Explainers (only for tree-based models)
+shap_explainers = {
+    name: shap.TreeExplainer(model)
+    for name, model in models.items()
+    if name in ["Random Forest", "LightGBM", "XGBoost"]
+}
+
+# Purpose Encoding
 purpose_mapping = {
     'Debt Consolidation': 0,
     'Credit Card': 1,
@@ -25,7 +36,7 @@ purpose_mapping = {
     'All Other': 6
 }
 
-# Feature descriptions
+# Feature Descriptions
 def display_feature_info():
     st.markdown("### 🔍 Feature Descriptions")
     st.markdown("""
@@ -44,7 +55,17 @@ def display_feature_info():
     - **pub.rec**: Number of derogatory public records.
     """)
 
-# Sidebar
+# Hugging Face chatbot setup
+@st.cache_resource
+def get_chatbot():
+    return pipeline("conversational", model="microsoft/DialoGPT-medium")
+
+chatbot = get_chatbot()
+
+# Page config
+st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
+
+# Sidebar Inputs
 with st.sidebar:
     st.title("🔧 Input Features")
     credit_policy = st.selectbox("Credit Policy", [0, 1])
@@ -61,10 +82,10 @@ with st.sidebar:
     delinq_2yrs = st.number_input("Delinquencies in Last 2 Years", min_value=0, value=0)
     pub_rec = st.number_input("Public Records", min_value=0, value=0)
 
-# Encode purpose
-purpose_encoded = purpose_mapping.get(purpose, 6)
+    selected_models = st.multiselect("Select Models for Prediction", list(models.keys()), default=list(models.keys()))
 
-# Prepare input
+# Encode and Prepare Input
+purpose_encoded = purpose_mapping.get(purpose, 6)
 input_data = pd.DataFrame([{
     "credit.policy": credit_policy,
     "purpose": purpose_encoded,
@@ -85,18 +106,31 @@ input_data = pd.DataFrame([{
 st.title("🏦 Loan Approval Prediction App")
 st.markdown("#### Made with ❤️ by Team Numerixa")
 
-# Subsections
+# Prediction Section
 with st.expander("📊 Prediction Results"):
-    if st.button("Predict with All Models"):
+    if st.button("Predict"):
         results = {}
-        for name, model in models.items():
+        for name in selected_models:
+            model = models[name]
             prediction = model.predict(input_data)[0]
             label = "Approved ✅" if prediction == 1 else "Not Approved ❌"
             results[name] = label
         st.write("### 🔮 Predictions:")
         for model, label in results.items():
-            st.success(f"{model.upper()}: {label}")
+            st.success(f"{model}: {label}")
 
+# SHAP Explanation
+with st.expander("🧠 SHAP Explanation"):
+    for name in selected_models:
+        if name in shap_explainers:
+            explainer = shap_explainers[name]
+            shap_values = explainer.shap_values(input_data)
+            st.write(f"**{name} SHAP Explanation:**")
+            fig, ax = plt.subplots()
+            shap.summary_plot(shap_values, input_data, plot_type="bar", show=False)
+            st.pyplot(fig)
+
+# Insights Section
 with st.expander("📈 Insights"):
     st.markdown("""
     - High FICO score usually indicates good creditworthiness.
@@ -105,12 +139,15 @@ with st.expander("📈 Insights"):
     - Fewer recent credit inquiries are seen positively by lenders.
     """)
 
+# Feature Description Section
 with st.expander("💡 Feature Guide"):
     display_feature_info()
 
-# Optional chatbot UI
-with st.expander("💬 Ask the Bot (Beta)"):
-    st.markdown("This is a placeholder for an assistant to answer your loan-related questions.")
-    user_question = st.text_input("Ask a question about loan eligibility:")
+# Chatbot Section
+with st.expander("💬 Ask the Bot (HuggingFace Chatbot)"):
+    user_question = st.text_input("Ask your loan-related question:")
     if user_question:
-        st.info("🤖: I am still learning. In future updates, I will give you a smart answer!")
+        from transformers import Conversational
+        convo = Conversational(user_question)
+        response = chatbot(convo)
+        st.info(f"🤖: {response[0].generated_responses[-1]}")

@@ -121,16 +121,19 @@ if st.sidebar.button("Predict"):
 
     # SHAP explanation
     st.subheader("📊 SHAP Explanation")
-    explainer = shap.Explainer(selected_model)
-    shap_values = explainer(input_df)
+    try:
+        explainer = shap.Explainer(selected_model)
+        shap_values = explainer(input_df)
 
-    st.markdown("**Top Features Impacting the Decision:**")
-    fig_shap_bar = shap.plots.bar(shap_values[0], show=False)
-    st.pyplot(fig_shap_bar.figure)
+        st.markdown("**Top Features Impacting the Decision:**")
+        fig_shap_bar = shap.plots.bar(shap_values[0], show=False)
+        st.pyplot(fig_shap_bar.figure)
 
-    with st.expander("See SHAP Waterfall Explanation"):
-        fig_waterfall = shap.plots.waterfall(shap_values[0], show=False)
-        st.pyplot(fig_waterfall.figure)
+        with st.expander("See SHAP Waterfall Explanation"):
+            fig_waterfall = shap.plots.waterfall(shap_values[0], show=False)
+            st.pyplot(fig_waterfall.figure)
+    except Exception as e:
+        st.warning("SHAP explanation not available for this model.")
 
 # Insights section
 st.subheader("📈 Insights")
@@ -147,11 +150,14 @@ def get_chatbot():
     return pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.1", 
                     token=st.secrets["HF_TOKEN"])
 
-chatbot = get_chatbot()
-chat_input = st.text_input("Ask something about loan prediction or finance:")
-if chat_input:
-    result = chatbot(chat_input, max_new_tokens=100)[0]["generated_text"]
-    st.markdown(f"**Chatbot:** {result}")
+try:
+    chatbot = get_chatbot()
+    chat_input = st.text_input("Ask something about loan prediction or finance:")
+    if chat_input:
+        result = chatbot(chat_input, max_new_tokens=100)[0]["generated_text"]
+        st.markdown(f"**Chatbot:** {result}")
+except Exception as e:
+    st.warning("Chatbot is currently unavailable. Please check your HuggingFace token or internet connection.")
 
 # Footer
 st.markdown("---")

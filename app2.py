@@ -1,89 +1,116 @@
 import streamlit as st
-import joblib
 import pandas as pd
-import numpy as np
+import joblib
 
-# Load saved models
-logreg = joblib.load("models/logistic_regression_model.joblib")
-dt = joblib.load("models/decision_tree_model.joblib")
-rf = joblib.load("models/random_forest_model.joblib")
-lgbm = joblib.load("models/lightgbm_model.joblib")
-xgb = joblib.load("models/xgboost_model.joblib")
+# Set page config
+st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
 
-models = {
-    "Logistic Regression": logreg,
-    "Decision Tree": dt,
-    "Random Forest": rf,
-    "LightGBM": lgbm,
-    "XGBoost": xgb
+model_files = {
+    "Logistic Regression": "models/logistic_regression_model.joblib",
+    "Decision Tree": "models/decision_tree_model.joblib",
+    "Random Forest": "models/random_forest_model.joblib",
+    "LightGBM": "models/lightgbm_model.joblib",
+    "XGBoost": "models/xgboost_model.joblib"
+}
+models = {name: joblib.load(path) for name, path in model_files.items()}
+
+# Purpose encoding
+purpose_mapping = {
+    'Debt Consolidation': 0,
+    'Credit Card': 1,
+    'Home Improvement': 2,
+    'Major Purchase': 3,
+    'Small Business': 4,
+    'Educational': 5,
+    'All Other': 6
 }
 
-# Define top 10 features (replace with your actual feature list)
-top_features = ['feature1', 'feature2', 'feature3', 'feature4', 'feature5',
-                'feature6', 'feature7', 'feature8', 'feature9', 'feature10']
+# Feature descriptions
+def display_feature_info():
+    st.markdown("### 🔍 Feature Descriptions")
+    st.markdown("""
+    - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
+    - **purpose**: Reason for the loan (e.g. Debt Consolidation, Major Purchase).
+    - **int.rate**: Interest rate on the loan.
+    - **installment**: Monthly installment paid by the borrower.
+    - **log.annual.inc**: Natural log of the self-reported annual income.
+    - **dti**: Debt-to-income ratio.
+    - **fico**: FICO credit score.
+    - **days.with.cr.line**: Number of days the borrower has had a credit line.
+    - **revol.bal**: Revolving balance on credit card (amount unpaid at end of month).
+    - **revol.util**: Revolving line utilization rate (credit used vs. total available).
+    - **inq.last.6mths**: Number of inquiries in the last 6 months.
+    - **delinq.2yrs**: Number of times borrower was 30+ days past due in the last 2 years.
+    - **pub.rec**: Number of derogatory public records.
+    """)
 
-# App Title
-st.title("📊 Loan Default Prediction Dashboard")
+# Sidebar
+with st.sidebar:
+    st.title("🔧 Input Features")
+    credit_policy = st.selectbox("Credit Policy", [0, 1])
+    purpose = st.selectbox("Purpose", list(purpose_mapping.keys()))
+    int_rate = st.number_input("Interest Rate", min_value=0.0, value=0.12)
+    installment = st.number_input("Installment", min_value=0.0, value=250.0)
+    log_annual_inc = st.number_input("Log Annual Income", min_value=0.0, value=10.5)
+    dti = st.number_input("Debt-to-Income Ratio", min_value=0.0, value=15.0)
+    fico = st.slider("FICO Score", min_value=300, max_value=850, value=720)
+    days_with_cr_line = st.number_input("Days with Credit Line", min_value=0.0, value=2000.0)
+    revol_bal = st.number_input("Revolving Balance", min_value=0.0, value=15000.0)
+    revol_util = st.number_input("Revolving Utilization (%)", min_value=0.0, value=45.0)
+    inq_last_6mths = st.number_input("Inquiries in Last 6 Months", min_value=0, value=1)
+    delinq_2yrs = st.number_input("Delinquencies in Last 2 Years", min_value=0, value=0)
+    pub_rec = st.number_input("Public Records", min_value=0, value=0)
 
-# Sidebar Navigation
-section = st.sidebar.radio("Go to", ["Bulk Prediction", "Single Prediction"])
+# Encode purpose
+purpose_encoded = purpose_mapping.get(purpose, 6)
 
-# Bulk Prediction Section
-if section == "Bulk Prediction":
-    st.subheader("📂 Bulk File Prediction")
-    uploaded_file = st.file_uploader("Upload a CSV file with 10 features", type="csv")
+# Prepare input
+input_data = pd.DataFrame([{
+    "credit.policy": credit_policy,
+    "purpose": purpose_encoded,
+    "int.rate": int_rate,
+    "installment": installment,
+    "log.annual.inc": log_annual_inc,
+    "dti": dti,
+    "fico": fico,
+    "days.with.cr.line": days_with_cr_line,
+    "revol.bal": revol_bal,
+    "revol.util": revol_util,
+    "inq.last.6mths": inq_last_6mths,
+    "delinq.2yrs": delinq_2yrs,
+    "pub.rec": pub_rec
+}])
 
-    if uploaded_file is not None:
-        data = pd.read_csv(uploaded_file)
-        st.write("Preview:", data.head())
+# Main UI
+st.title("🏦 Loan Approval Prediction App")
+st.markdown("#### Made with ❤️ by Team Numerixa")
 
-        model_name = st.selectbox("Choose Model", list(models.keys()))
-        if st.button("Predict"):
-            model = models[model_name]
-            preds = model.predict(data[top_features])
-            data['Prediction'] = preds
-            st.success("✅ Prediction Completed")
-            st.write(data)
-            csv = data.to_csv(index=False).encode()
-            st.download_button("Download Results", csv, file_name="predictions.csv")
+# Subsections
+with st.expander("📊 Prediction Results"):
+    if st.button("Predict with All Models"):
+        results = {}
+        for name, model in models.items():
+            prediction = model.predict(input_data)[0]
+            label = "Approved ✅" if prediction == 1 else "Not Approved ❌"
+            results[name] = label
+        st.write("### 🔮 Predictions:")
+        for model, label in results.items():
+            st.success(f"{model.upper()}: {label}")
 
-# Single Prediction (Embedded system-like)
-elif section == "Single Prediction":
-    st.subheader("🧠 Embedded System Prediction")
+with st.expander("📈 Insights"):
+    st.markdown("""
+    - High FICO score usually indicates good creditworthiness.
+    - A lower DTI ratio increases chances of loan approval.
+    - Purpose of loan plays a key role in underwriting.
+    - Fewer recent credit inquiries are seen positively by lenders.
+    """)
 
-    st.markdown("Fill in the input values for a single prediction:")
+with st.expander("💡 Feature Guide"):
+    display_feature_info()
 
-    # Input form
-    with st.form("input_form"):
-        inputs = {}
-        for feat in top_features:
-            inputs[feat] = st.number_input(f"{feat}", value=0.0)
-        submitted = st.form_submit_button("Predict")
-
-    if submitted:
-        input_df = pd.DataFrame([inputs])
-        model_name = st.selectbox("Choose Model", list(models.keys()))
-        model = models[model_name]
-
-        # Prediction & Probability
-        prediction = model.predict(input_df)[0]
-        probability = model.predict_proba(input_df)[0][1]
-
-        st.markdown("### 🔍 Prediction Output")
-        st.write(f"**Predicted Class:** {'Default' if prediction == 1 else 'Paid'}")
-        st.write(f"**Probability of Default:** {probability:.2%}")
-
-        # Progress bar like an embedded gauge
-        st.progress(min(int(probability * 100), 100))
-
-        # Insights Section
-        st.markdown("---")
-        st.markdown("### 📈 Prediction Insights")
-
-        if probability > 0.5:
-            st.warning("This customer has a high likelihood of not fully paying the loan.")
-        else:
-            st.success("This customer is likely to fully repay the loan.")
-
-        st.markdown("Customize this section with SHAP plots or explanations in the next step.")
-
+# Optional chatbot UI
+with st.expander("💬 Ask the Bot (Beta)"):
+    st.markdown("This is a placeholder for an assistant to answer your loan-related questions.")
+    user_question = st.text_input("Ask a question about loan eligibility:")
+    if user_question:
+        st.info("🤖: I am still learning. In future updates, I will give you a smart answer!")

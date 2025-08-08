@@ -6,11 +6,11 @@ import joblib
 st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
 
 model_files = {
-    "Logistic Regression": "models/logistic_regression_model.joblib",
-    "Decision Tree": "models/decision_tree_model.joblib",
-    "Random Forest": "models/random_forest_model.joblib",
-    "LightGBM": "models/lightgbm_model.joblib",
-    "XGBoost": "models/xgboost_model.joblib"
+    "Logistic Regression": "logistic_regression_model.joblib",
+    "Decision Tree": "decision_tree_model.joblib",
+    "Random Forest": "random_forest_model.joblib",
+    "LightGBM": "lightgbm_model.joblib",
+    "XGBoost": "xgboost_model.joblib"
 }
 models = {name: joblib.load(path) for name, path in model_files.items()}
 

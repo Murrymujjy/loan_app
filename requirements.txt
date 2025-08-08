@@ -9,3 +9,4 @@ matplotlib
 shap
 transformers
 plotly
+torch

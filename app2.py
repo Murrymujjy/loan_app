@@ -125,51 +125,41 @@ if st.sidebar.button("Predict"):
 # from huggingface_hub import InferenceClient
 import traceback
 
-# App title
 st.title("💬 Loan Advisor Chatbot")
 st.write("Ask me anything about loans, eligibility, or financial planning.")
 
-# Get Hugging Face API token
 HF_TOKEN = st.secrets.get("HF_TOKEN", None)
-
 if HF_TOKEN is None:
     st.error("❌ Missing HF_TOKEN in Streamlit Secrets!")
     st.stop()
 
-# Initialize Hugging Face client
-client = InferenceClient(
-    model="mistralai/Mistral-7B-Instruct-v0.1",
-    token=HF_TOKEN
-)
+client = InferenceClient(token=HF_TOKEN)
 
-# Chat history in session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display previous chat
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User input
 if prompt := st.chat_input("Type your loan-related question..."):
-    # Add user message to history
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Bot response
     with st.chat_message("assistant"):
         try:
-            # Call Hugging Face Inference API
-            response = client.text_generation(
-                prompt,
-                max_new_tokens=200,
-                temperature=0.7,
-                do_sample=True
+            completion = client.chat_completion(
+                model="mistralai/Mistral-7B-Instruct-v0.1",
+                messages=[
+                    {"role": "system", "content": "You are a helpful loan advisor."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.7
             )
 
-            bot_reply = response  # InferenceClient returns a string
+            bot_reply = completion.choices[0].message["content"]
 
         except Exception as e:
             bot_reply = f"⚠️ Error: {type(e).__name__}: {e}\n\n{traceback.format_exc()}"

@@ -6,11 +6,12 @@ import plotly.graph_objects as go
 from huggingface_hub import InferenceClient
 import traceback
 import matplotlib.pyplot as plt
+import numpy as np
 
 # ----------------- CONFIG -----------------
 st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
 
-# Styling
+# Background and styling
 st.markdown("""
     <style>
     body { background-color: #f5f7fa; color: #333; }
@@ -28,12 +29,12 @@ st.markdown("An intelligent system to predict loan approval using multiple ML mo
 with st.expander("🧠 Feature Descriptions"):
     st.markdown("""
     - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
-    - **purpose**: Purpose of the loan.
-    - **int.rate**: Interest rate.
-    - **installment**: Monthly payment.
+    - **purpose**: Purpose of the loan (debt consolidation, educational, etc.).
+    - **int.rate**: Interest rate of the loan.
+    - **installment**: Monthly payment for the loan.
     - **log.annual.inc**: Log of annual income.
     - **dti**: Debt-to-income ratio.
-    - **fico**: FICO score.
+    - **fico**: FICO credit score.
     - **days.with.cr.line**: Days with credit line open.
     - **revol.bal**: Revolving balance.
     - **revol.util**: Revolving utilization rate.
@@ -114,24 +115,25 @@ if st.sidebar.button("Predict"):
     try:
         model_type = type(selected_model).__name__.lower()
 
-        if "lightgbm" in model_type:
-            explainer = shap.TreeExplainer(selected_model, feature_perturbation="tree_path_dependent")
-            shap_values = explainer.shap_values(input_df, check_additivity=False)
+        if "lightgbm" in model_type or "lgbm" in model_type:
+            explainer = shap.TreeExplainer(selected_model)
+            shap_values = explainer.shap_values(input_df.to_numpy())
         elif "xgb" in model_type or "tree" in model_type or "forest" in model_type:
             explainer = shap.TreeExplainer(selected_model)
             shap_values = explainer.shap_values(input_df)
         elif "logistic" in model_type or "linear" in model_type:
-            explainer = shap.LinearExplainer(selected_model, input_df)
+            explainer = shap.LinearExplainer(selected_model, input_df, feature_perturbation="interventional")
             shap_values = explainer.shap_values(input_df)
         else:
             explainer = shap.KernelExplainer(selected_model.predict_proba, shap.sample(input_df, 1))
             shap_values = explainer.shap_values(input_df)
 
         st.markdown("**Top Features Impacting the Decision:**")
-        if isinstance(shap_values, list):
+        if isinstance(shap_values, list):  # Binary classification returns list
             shap_values = shap_values[1]
         shap.summary_plot(shap_values, input_df, plot_type="bar", show=False)
         st.pyplot(plt.gcf(), bbox_inches="tight")
+        plt.clf()
 
     except Exception as e:
         st.warning(f"SHAP explanation not available. Error: {e}")
@@ -161,13 +163,22 @@ if prompt := st.chat_input("Type your loan-related question..."):
 
     with st.chat_message("assistant"):
         try:
-            # FIX: Use text_generation instead of chat_completion
-            bot_reply = client.text_generation(
+            # Safe call to avoid StopIteration
+            completion = client.chat_completion(
                 model="mistralai/Mistral-7B-Instruct-v0.1",
-                prompt=f"You are a helpful loan advisor. User asked: {prompt}\nAnswer:",
-                max_new_tokens=300,
+                messages=[
+                    {"role": "system", "content": "You are a helpful loan advisor."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
                 temperature=0.7
             )
+
+            if hasattr(completion, "choices") and completion.choices:
+                bot_reply = completion.choices[0].message["content"]
+            else:
+                bot_reply = "⚠️ No response received from model."
+
         except Exception as e:
             bot_reply = f"⚠️ Error: {type(e).__name__}: {e}\n\n{traceback.format_exc()}"
 

@@ -148,12 +148,15 @@ st.markdown("""
 
 # Cache chatbot so it loads only once
 
+from transformers import pipeline
+import streamlit as st
+
 @st.cache_resource
 def get_chatbot():
     return pipeline(
         "text-generation",
         model="mistralai/Mistral-7B-Instruct-v0.1",
-        token=st.secrets["HF_TOKEN"]
+        token=st.secrets["HF_TOKEN"]  # ✅ correct param
     )
 
 chatbot = get_chatbot()

@@ -143,25 +143,38 @@ st.markdown("""
 - Fewer recent inquiries and delinquencies improve approval chances.
 """)
 
-# from transformers import pipeline
-# import streamlit as st
+import streamlit as st
+from huggingface_hub import InferenceClient
 
-# from transformers import pipeline
-# import streamlit as st
+# Set up the app
+st.title("💬 Loan Advisor Chatbot")
+st.write("Ask me anything about your loan or prediction:")
 
-@st.cache_resource
-def get_chatbot():
-    hf_token = st.secrets.get("HF_TOKEN", None)
-    if not hf_token:
-        st.error("HF_TOKEN not found in secrets")
-        st.stop()
+# Hugging Face API client
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Make sure you added this in Streamlit secrets
+client = InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.1", token=HF_TOKEN)
 
-    return pipeline(
-        "text-generation",
-        model="mistralai/Mistral-7B-Instruct-v0.1",
-        token=hf_token
-    )
-chatbot = get_chatbot()
+# User input
+user_input = st.text_input("You:", "")
+
+# Generate advice
+if user_input:
+    with st.spinner("Thinking..."):
+        response_text = ""
+        for message in client.chat_completion(
+            messages=[{"role": "user", "content": user_input}],
+            max_tokens=512,
+            stream=True
+        ):
+            if message.choices[0].delta.content:
+                chunk = message.choices[0].delta.content
+                response_text += chunk
+                st.write(response_text)  # live updating
+
+    # Final full output
+    st.subheader("Bot:")
+    st.write(response_text)
+
 
 # System role instruction
 SYSTEM_PROMPT = """

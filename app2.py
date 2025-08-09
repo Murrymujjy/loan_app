@@ -4,6 +4,8 @@ import joblib
 import shap
 import plotly.graph_objects as go
 from huggingface_hub import InferenceClient
+import traceback
+import matplotlib.pyplot as plt
 
 # ----------------- CONFIG -----------------
 st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
@@ -93,7 +95,7 @@ if st.sidebar.button("Predict"):
     proba = selected_model.predict_proba(input_df)[0][1]
 
     st.subheader("🎯 Prediction Result")
-    st.markdown(f"**Prediction:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
+    st.markdown(f"**Loan Status:** {'Loan Approved ✅' if prediction == 1 else 'Loan Rejected ❌'}")
     st.markdown(f"**Probability of Approval:** {round(proba * 100, 2)}%")
 
     # Gauge Chart
@@ -115,16 +117,12 @@ if st.sidebar.button("Predict"):
 
         st.markdown("**Top Features Impacting the Decision:**")
         shap.plots.bar(shap_values[0], show=False)
-        st.pyplot(bbox_inches="tight")
+        st.pyplot(plt.gcf(), bbox_inches="tight")
 
-    except:
-        st.warning("SHAP explanation not available for this model.")
+    except Exception as e:
+        st.warning(f"SHAP explanation not available for this model. Error: {e}")
 
 # ----------------- CHATBOT -----------------
-# import streamlit as st
-# from huggingface_hub import InferenceClient
-import traceback
-
 st.title("💬 Loan Advisor Chatbot")
 st.write("Ask me anything about loans, eligibility, or financial planning.")
 
@@ -133,7 +131,11 @@ if HF_TOKEN is None:
     st.error("❌ Missing HF_TOKEN in Streamlit Secrets!")
     st.stop()
 
-client = InferenceClient(token=HF_TOKEN)
+# FIX: set model at client initialization to avoid StopIteration
+client = InferenceClient(
+    model="mistralai/Mistral-7B-Instruct-v0.1",
+    token=HF_TOKEN
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -150,7 +152,6 @@ if prompt := st.chat_input("Type your loan-related question..."):
     with st.chat_message("assistant"):
         try:
             completion = client.chat_completion(
-                model="mistralai/Mistral-7B-Instruct-v0.1",
                 messages=[
                     {"role": "system", "content": "You are a helpful loan advisor."},
                     {"role": "user", "content": prompt}
@@ -158,7 +159,6 @@ if prompt := st.chat_input("Type your loan-related question..."):
                 max_tokens=300,
                 temperature=0.7
             )
-
             bot_reply = completion.choices[0].message["content"]
 
         except Exception as e:

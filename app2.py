@@ -121,46 +121,52 @@ if st.sidebar.button("Predict"):
         st.warning("SHAP explanation not available for this model.")
 
 # ----------------- CHATBOT -----------------
-st.markdown("---")
-st.subheader("💬 Loan Advisor Chatbot")
+import streamlit as st
+from huggingface_hub import InferenceClient
 
-HF_TOKEN = st.secrets["HF_TOKEN"]  # Add this in .streamlit/secrets.toml
-client = InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.1", token=HF_TOKEN)
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Loan Advisor Chatbot", page_icon="💬", layout="centered")
 
-SYSTEM_PROMPT = """
-You are a friendly and knowledgeable loan advisor. 
-Explain loan terms, eligibility, interest rates, and repayment strategies clearly.
-"""
+st.title("💬 Loan Advisor Chatbot")
+st.write("Ask me anything about loans, eligibility, or financial planning.")
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# --- HUGGING FACE CLIENT ---
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Make sure you have this in your Streamlit secrets
+client = InferenceClient(token=HF_TOKEN)
 
-user_msg = st.text_input("You:", key="chat_input")
+# --- CHAT STATE ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "system", "content": "You are a friendly, knowledgeable loan advisor. Give detailed, practical, and easy-to-understand advice on loans, credit, and repayment. Avoid one-line answers."}
+    ]
 
-if user_msg:
-    st.session_state.chat_history.append({"role": "user", "content": user_msg})
+# --- DISPLAY CHAT HISTORY ---
+for msg in st.session_state.messages:
+    if msg["role"] != "system":
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-    with st.spinner("Thinking..."):
-        response_text = ""
-        for message in client.chat_completion(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                *st.session_state.chat_history
-            ],
-            max_tokens=300,
-            stream=True
-        ):
-            if message.choices[0].delta.content:
-                response_text += message.choices[0].delta.content
+# --- USER INPUT ---
+if user_input := st.chat_input("Type your question about loans here..."):
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+    # --- GET MODEL RESPONSE (Non-streaming) ---
+    try:
+        response = client.chat_completion(
+            model="mistralai/Mistral-7B-Instruct-v0.1",
+            messages=st.session_state.messages
+        )
+        bot_reply = response.choices[0].message["content"]
+    except Exception as e:
+        bot_reply = f"⚠️ Error: {e}"
 
-# Display chat
-for msg in st.session_state.chat_history:
-    if msg["role"] == "user":
-        st.markdown(f"**You:** {msg['content']}")
-    else:
-        st.markdown(f"**Bot:** {msg['content']}")
+    # Add assistant message
+    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+    with st.chat_message("assistant"):
+        st.markdown(bot_reply)
 
 # Footer
 st.markdown("---")

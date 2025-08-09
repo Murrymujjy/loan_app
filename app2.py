@@ -95,8 +95,8 @@ if st.sidebar.button("Predict"):
     proba = selected_model.predict_proba(input_df)[0][1]
 
     st.subheader("🎯 Prediction Result")
-    st.markdown(f"**Loan Status:** {'Loan Approved ✅' if prediction == 1 else 'Loan Rejected ❌'}")
-    st.markdown(f"**Probability of Approval:** {round(proba * 100, 2)}%")
+    st.markdown(f"**Loan Decision:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
+    st.markdown(f"**Probability of Loan Approval:** {round(proba * 100, 2)}%")
 
     # Gauge Chart
     fig = go.Figure(go.Indicator(
@@ -112,15 +112,26 @@ if st.sidebar.button("Predict"):
 
     # SHAP Explanation
     try:
-        explainer = shap.Explainer(selected_model)
-        shap_values = explainer(input_df)
+        model_type = type(selected_model).__name__.lower()
+
+        if "lightgbm" in model_type or "xgb" in model_type or "tree" in model_type or "forest" in model_type:
+            explainer = shap.TreeExplainer(selected_model)
+            shap_values = explainer.shap_values(input_df)
+        elif "logistic" in model_type or "linear" in model_type:
+            explainer = shap.LinearExplainer(selected_model, input_df)
+            shap_values = explainer.shap_values(input_df)
+        else:
+            explainer = shap.KernelExplainer(selected_model.predict_proba, shap.sample(input_df, 1))
+            shap_values = explainer.shap_values(input_df)
 
         st.markdown("**Top Features Impacting the Decision:**")
-        shap.plots.bar(shap_values[0], show=False)
+        if isinstance(shap_values, list):  # For multi-class or binary classification
+            shap_values = shap_values[1]  # Class=1 (approval)
+        shap.summary_plot(shap_values, input_df, plot_type="bar", show=False)
         st.pyplot(plt.gcf(), bbox_inches="tight")
 
     except Exception as e:
-        st.warning(f"SHAP explanation not available for this model. Error: {e}")
+        st.warning(f"SHAP explanation not available. Error: {e}")
 
 # ----------------- CHATBOT -----------------
 st.title("💬 Loan Advisor Chatbot")
@@ -131,11 +142,7 @@ if HF_TOKEN is None:
     st.error("❌ Missing HF_TOKEN in Streamlit Secrets!")
     st.stop()
 
-# FIX: set model at client initialization to avoid StopIteration
-client = InferenceClient(
-    model="mistralai/Mistral-7B-Instruct-v0.1",
-    token=HF_TOKEN
-)
+client = InferenceClient(token=HF_TOKEN)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -152,6 +159,7 @@ if prompt := st.chat_input("Type your loan-related question..."):
     with st.chat_message("assistant"):
         try:
             completion = client.chat_completion(
+                model="mistralai/Mistral-7B-Instruct-v0.1",
                 messages=[
                     {"role": "system", "content": "You are a helpful loan advisor."},
                     {"role": "user", "content": prompt}
@@ -159,6 +167,7 @@ if prompt := st.chat_input("Type your loan-related question..."):
                 max_tokens=300,
                 temperature=0.7
             )
+
             bot_reply = completion.choices[0].message["content"]
 
         except Exception as e:

@@ -139,51 +139,67 @@ if st.sidebar.button("Predict"):
         st.warning(f"SHAP explanation not available. Error: {e}")
 
 # ----------------- CHATBOT -----------------
-st.title("💬 Loan Advisor Chatbot")
-st.write("Ask me anything about loans, eligibility, or financial planning.")
+import streamlit as st
+from huggingface_hub import InferenceClient
 
-HF_TOKEN = st.secrets.get("HF_TOKEN", None)
-if HF_TOKEN is None:
-    st.error("❌ Missing HF_TOKEN in Streamlit Secrets!")
-    st.stop()
+# Set your HF API key in Streamlit secrets or env variable
+HF_API_TOKEN = st.secrets["HF_API_TOKEN"]
+client = InferenceClient(token=HF_API_TOKEN)
 
-client = InferenceClient(token=HF_TOKEN)
+# Preferred models list (will try in this order)
+PREFERRED_MODELS = [
+    "mistralai/Mistral-7B-Instruct-v0.1",
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    "meta-llama/Llama-2-13b-chat-hf",
+    "tiiuae/falcon-7b-instruct"
+]
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Type your loan-related question..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
+def get_available_model():
+    """Check which preferred model works for chat completion."""
+    for model in PREFERRED_MODELS:
         try:
-            # Safe call to avoid StopIteration
+            # Try a test message with very low max_tokens to check availability
+            client.chat_completion(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=5
+            )
+            return model
+        except StopIteration:
+            continue
+        except Exception as e:
+            continue
+    return None
+
+# Cache the working model so we don't check every time
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = get_available_model()
+
+if not st.session_state.selected_model:
+    st.error("❌ No available chat models found from the preferred list.")
+else:
+    model_name = st.session_state.selected_model
+    st.info(f"✅ Using model: **{model_name}**")
+
+    st.markdown("### 💬 Loan Advisor Chatbot")
+    user_input = st.text_input("Ask me anything about loans, eligibility, or financial planning:")
+
+    if user_input:
+        try:
             completion = client.chat_completion(
-                model="mistralai/Mistral-7B-Instruct-v0.1",
+                model=model_name,
                 messages=[
-                    {"role": "system", "content": "You are a helpful loan advisor."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."},
+                    {"role": "user", "content": user_input}
                 ],
                 max_tokens=300,
                 temperature=0.7
             )
-
-            if hasattr(completion, "choices") and completion.choices:
-                bot_reply = completion.choices[0].message["content"]
-            else:
-                bot_reply = "⚠️ No response received from model."
-
+            bot_reply = completion.choices[0].message["content"]
+            st.markdown(f"**Bot:** {bot_reply}")
         except Exception as e:
-            bot_reply = f"⚠️ Error: {type(e).__name__}: {e}\n\n{traceback.format_exc()}"
+            st.error(f"⚠️ Error: {e}")
 
-        st.markdown(bot_reply)
-        st.session_state.messages.append({"role": "assistant", "content": bot_reply})
 
 # Footer
 st.markdown("---")

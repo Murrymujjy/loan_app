@@ -121,55 +121,61 @@ if st.sidebar.button("Predict"):
         st.warning("SHAP explanation not available for this model.")
 
 # ----------------- CHATBOT -----------------
-import streamlit as st
-from huggingface_hub import InferenceClient
+# import streamlit as st
+# from huggingface_hub import InferenceClient
+import traceback
 
-# --- PAGE CONFIG ---
-import streamlit as st
-from huggingface_hub import InferenceClient
-
-st.set_page_config(page_title="Loan Advisor Chatbot", page_icon="💬", layout="centered")
+# App title
 st.title("💬 Loan Advisor Chatbot")
 st.write("Ask me anything about loans, eligibility, or financial planning.")
 
-HF_TOKEN = st.secrets["HF_TOKEN"]  # Add your HF token in Streamlit secrets
-client = InferenceClient(token=HF_TOKEN)
+# Get Hugging Face API token
+HF_TOKEN = st.secrets.get("HF_TOKEN", None)
 
-if "history" not in st.session_state:
-    st.session_state.history = ""
+if HF_TOKEN is None:
+    st.error("❌ Missing HF_TOKEN in Streamlit Secrets!")
+    st.stop()
 
-for msg in st.session_state.history.split("\n"):
-    if msg.strip():
-        role, content = msg.split(":", 1)
-        with st.chat_message(role):
-            st.markdown(content.strip())
+# Initialize Hugging Face client
+client = InferenceClient(
+    model="mistralai/Mistral-7B-Instruct-v0.1",
+    token=HF_TOKEN
+)
 
-if user_input := st.chat_input("Type your question here..."):
-    st.session_state.history += f"user: {user_input}\n"
+# Chat history in session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display previous chat
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# User input
+if prompt := st.chat_input("Type your loan-related question..."):
+    # Add user message to history
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(user_input)
+        st.markdown(prompt)
 
-    try:
-        # Call text generation instead of chat_completion
-        full_prompt = (
-            "You are a friendly and detailed loan advisor. "
-            "Give practical and step-by-step advice on loans.\n\n"
-            + st.session_state.history
-            + "assistant:"
-        )
-        output = client.text_generation(
-            model="mistralai/Mistral-7B-Instruct-v0.1",
-            prompt=full_prompt,
-            max_new_tokens=300,
-            temperature=0.7
-        )
-        bot_reply = output
-    except Exception as e:
-        bot_reply = f"⚠️ Error: {e}"
-
-    st.session_state.history += f"assistant: {bot_reply}\n"
+    # Bot response
     with st.chat_message("assistant"):
+        try:
+            # Call Hugging Face Inference API
+            response = client.text_generation(
+                prompt,
+                max_new_tokens=200,
+                temperature=0.7,
+                do_sample=True
+            )
+
+            bot_reply = response  # InferenceClient returns a string
+
+        except Exception as e:
+            bot_reply = f"⚠️ Error: {type(e).__name__}: {e}\n\n{traceback.format_exc()}"
+
         st.markdown(bot_reply)
+        st.session_state.messages.append({"role": "assistant", "content": bot_reply})
 
 # Footer
 st.markdown("---")

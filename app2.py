@@ -125,46 +125,49 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Loan Advisor Chatbot", page_icon="💬", layout="centered")
+import streamlit as st
+from huggingface_hub import InferenceClient
 
+st.set_page_config(page_title="Loan Advisor Chatbot", page_icon="💬", layout="centered")
 st.title("💬 Loan Advisor Chatbot")
 st.write("Ask me anything about loans, eligibility, or financial planning.")
 
-# --- HUGGING FACE CLIENT ---
-HF_TOKEN = st.secrets["HF_TOKEN"]  # Make sure you have this in your Streamlit secrets
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Add your HF token in Streamlit secrets
 client = InferenceClient(token=HF_TOKEN)
 
-# --- CHAT STATE ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": "You are a friendly, knowledgeable loan advisor. Give detailed, practical, and easy-to-understand advice on loans, credit, and repayment. Avoid one-line answers."}
-    ]
+if "history" not in st.session_state:
+    st.session_state.history = ""
 
-# --- DISPLAY CHAT HISTORY ---
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+for msg in st.session_state.history.split("\n"):
+    if msg.strip():
+        role, content = msg.split(":", 1)
+        with st.chat_message(role):
+            st.markdown(content.strip())
 
-# --- USER INPUT ---
-if user_input := st.chat_input("Type your question about loans here..."):
-    # Add user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
+if user_input := st.chat_input("Type your question here..."):
+    st.session_state.history += f"user: {user_input}\n"
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # --- GET MODEL RESPONSE (Non-streaming) ---
     try:
-        response = client.chat_completion(
-            model="mistralai/Mistral-7B-Instruct-v0.1",
-            messages=st.session_state.messages
+        # Call text generation instead of chat_completion
+        full_prompt = (
+            "You are a friendly and detailed loan advisor. "
+            "Give practical and step-by-step advice on loans.\n\n"
+            + st.session_state.history
+            + "assistant:"
         )
-        bot_reply = response.choices[0].message["content"]
+        output = client.text_generation(
+            model="mistralai/Mistral-7B-Instruct-v0.1",
+            prompt=full_prompt,
+            max_new_tokens=300,
+            temperature=0.7
+        )
+        bot_reply = output
     except Exception as e:
         bot_reply = f"⚠️ Error: {e}"
 
-    # Add assistant message
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+    st.session_state.history += f"assistant: {bot_reply}\n"
     with st.chat_message("assistant"):
         st.markdown(bot_reply)
 

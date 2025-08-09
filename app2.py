@@ -111,10 +111,14 @@ if st.sidebar.button("Predict"):
     st.plotly_chart(fig, use_container_width=True)
 
     # SHAP Explanation
+        # SHAP Explanation
     try:
         model_type = type(selected_model).__name__.lower()
 
-        if "lightgbm" in model_type or "xgb" in model_type or "tree" in model_type or "forest" in model_type:
+        if "lightgbm" in model_type:
+            explainer = shap.TreeExplainer(selected_model, feature_perturbation="tree_path_dependent")
+            shap_values = explainer.shap_values(input_df.values)
+        elif "xgb" in model_type or "tree" in model_type or "forest" in model_type:
             explainer = shap.TreeExplainer(selected_model)
             shap_values = explainer.shap_values(input_df)
         elif "logistic" in model_type or "linear" in model_type:
@@ -125,13 +129,14 @@ if st.sidebar.button("Predict"):
             shap_values = explainer.shap_values(input_df)
 
         st.markdown("**Top Features Impacting the Decision:**")
-        if isinstance(shap_values, list):  # For multi-class or binary classification
+        if isinstance(shap_values, list):  # Binary classification returns list
             shap_values = shap_values[1]  # Class=1 (approval)
         shap.summary_plot(shap_values, input_df, plot_type="bar", show=False)
         st.pyplot(plt.gcf(), bbox_inches="tight")
 
     except Exception as e:
         st.warning(f"SHAP explanation not available. Error: {e}")
+
 
 # ----------------- CHATBOT -----------------
 st.title("💬 Loan Advisor Chatbot")

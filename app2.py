@@ -148,19 +148,23 @@ st.markdown("""
 
 @st.cache_resource
 def get_chatbot():
-    # Public model, no token required
-    return pipeline("text2text-generation", model="google/flan-t5-small")
+    return pipeline(
+        "text2text-generation",
+        model="google/flan-t5-base",  # more capable than small
+    )
 
 chatbot = get_chatbot()
 
-# Chat UI
 st.subheader("💬 Loan Advisor Chatbot")
 user_input = st.text_input("Ask me anything about your loan or prediction:", key="chat")
 
 if user_input:
     with st.spinner("Thinking..."):
-        response = chatbot(user_input, max_length=200, do_sample=True)[0]["generated_text"]
+        # Give the model better context
+        prompt = f"You are a helpful loan advisor. Answer in detail: {user_input}"
+        response = chatbot(prompt, max_length=300, do_sample=True)[0]["generated_text"]
         st.markdown(f"**Bot:** {response}")
+
 
 # Footer
 st.markdown("---")

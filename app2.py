@@ -1,58 +1,46 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import joblib
 import shap
-import matplotlib.pyplot as plt
-import streamlit.components.v1 as components
-from sklearn.preprocessing import LabelEncoder
-from transformers import pipeline
+import plotly.graph_objects as go
+from huggingface_hub import InferenceClient
 
-# Set Streamlit page config
+# ----------------- CONFIG -----------------
 st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
 
-# Set background color and header
+# Background and styling
 st.markdown("""
     <style>
-    body {
-        background-color: #f5f7fa;
-        color: #333;
-    }
-    .main {
-        background-color: #ffffff;
-        border-radius: 10px;
-        padding: 2rem;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    .stApp {
-        padding: 2rem;
-    }
+    body { background-color: #f5f7fa; color: #333; }
+    .main { background-color: #ffffff; border-radius: 10px; padding: 2rem;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .stApp { padding: 2rem; }
     </style>
 """, unsafe_allow_html=True)
 
-# Title
+# ----------------- TITLE -----------------
 st.title("💰 Loan Approval Prediction System")
 st.markdown("An intelligent system to predict loan approval using multiple ML models.")
 
-# Feature meanings
+# ----------------- FEATURE DESCRIPTIONS -----------------
 with st.expander("🧠 Feature Descriptions"):
     st.markdown("""
     - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
-    - **purpose**: The purpose of the loan (debt consolidation, educational, etc.).
+    - **purpose**: Purpose of the loan (debt consolidation, educational, etc.).
     - **int.rate**: Interest rate of the loan.
     - **installment**: Monthly payment for the loan.
-    - **log.annual.inc**: Natural log of the annual income.
+    - **log.annual.inc**: Log of annual income.
     - **dti**: Debt-to-income ratio.
     - **fico**: FICO credit score.
-    - **days.with.cr.line**: Number of days with credit line open.
-    - **revol.bal**: Revolving balance (amount unpaid on credit card).
-    - **revol.util**: Revolving line utilization rate.
-    - **inq.last.6mths**: Number of inquiries in the last 6 months.
-    - **delinq.2yrs**: Number of times delinquent in the past 2 years.
-    - **pub.rec**: Number of derogatory public records.
+    - **days.with.cr.line**: Days with credit line open.
+    - **revol.bal**: Revolving balance.
+    - **revol.util**: Revolving utilization rate.
+    - **inq.last.6mths**: Inquiries in last 6 months.
+    - **delinq.2yrs**: Delinquencies in last 2 years.
+    - **pub.rec**: Public records.
     """)
 
-# Load models
+# ----------------- LOAD MODELS -----------------
 model_files = {
     "Logistic Regression": "logistic_regression_model.joblib",
     "Decision Tree": "decision_tree_model.joblib",
@@ -60,7 +48,13 @@ model_files = {
     "LightGBM": "lightgbm_model.joblib",
     "XGBoost": "xgboost_model.joblib"
 }
-models = {name: joblib.load(path) for name, path in model_files.items()}
+
+models = {}
+for name, path in model_files.items():
+    try:
+        models[name] = joblib.load(path)
+    except:
+        st.warning(f"⚠️ Could not load model: {name}")
 
 # Purpose mapping
 purpose_mapping = {
@@ -69,7 +63,7 @@ purpose_mapping = {
     'all_other': 6
 }
 
-# Sidebar input form
+# ----------------- SIDEBAR INPUT -----------------
 st.sidebar.header("📋 Input Borrower Information")
 user_input = {
     "credit.policy": st.sidebar.selectbox("Credit Policy", [0, 1]),
@@ -87,27 +81,22 @@ user_input = {
     "pub.rec": st.sidebar.slider("Public Records", 0, 5, 0)
 }
 
-# Prepare input DataFrame
 input_df = pd.DataFrame([user_input])
 input_df['purpose'] = input_df['purpose'].map(purpose_mapping)
 
-# Model selection
-st.sidebar.markdown("---")
-selected_model_name = st.sidebar.selectbox("Select Model", list(model_files.keys()))
+# ----------------- PREDICTION -----------------
+selected_model_name = st.sidebar.selectbox("Select Model", list(models.keys()))
 selected_model = models[selected_model_name]
 
-# Predict
 if st.sidebar.button("Predict"):
     prediction = selected_model.predict(input_df)[0]
     proba = selected_model.predict_proba(input_df)[0][1]
 
-    # Show prediction
     st.subheader("🎯 Prediction Result")
     st.markdown(f"**Prediction:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
     st.markdown(f"**Probability of Approval:** {round(proba * 100, 2)}%")
 
-    # Gauge meter using plotly
-    import plotly.graph_objects as go
+    # Gauge Chart
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=round(proba * 100, 2),
@@ -119,114 +108,54 @@ if st.sidebar.button("Predict"):
                    {'range': [50, 100], 'color': '#ddffdd'}]}))
     st.plotly_chart(fig, use_container_width=True)
 
-    # SHAP explanation
-    st.subheader("📊 SHAP Explanation")
+    # SHAP Explanation
     try:
         explainer = shap.Explainer(selected_model)
         shap_values = explainer(input_df)
 
         st.markdown("**Top Features Impacting the Decision:**")
-        fig_shap_bar = shap.plots.bar(shap_values[0], show=False)
-        st.pyplot(fig_shap_bar.figure)
+        shap.plots.bar(shap_values[0], show=False)
+        st.pyplot(bbox_inches="tight")
 
-        with st.expander("See SHAP Waterfall Explanation"):
-            fig_waterfall = shap.plots.waterfall(shap_values[0], show=False)
-            st.pyplot(fig_waterfall.figure)
-    except Exception as e:
+    except:
         st.warning("SHAP explanation not available for this model.")
 
-# Insights section
-st.subheader("📈 Insights")
-st.markdown("""
-- Interest rate and FICO score are strong indicators of loan approval.
-- High revolving balance or utilization may negatively affect approval.
-- Fewer recent inquiries and delinquencies improve approval chances.
-""")
+# ----------------- CHATBOT -----------------
+st.markdown("---")
+st.subheader("💬 Loan Advisor Chatbot")
 
-import streamlit as st
-from huggingface_hub import InferenceClient
-
-import streamlit as st
-from huggingface_hub import InferenceClient
-
-# App title
-st.title("💬 Loan Advisor Chatbot")
-st.write("Ask me anything about your loan or prediction:")
-
-# Hugging Face API client
-HF_TOKEN = st.secrets["HF_TOKEN"]  # Put your HF token in Streamlit secrets
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Add this in .streamlit/secrets.toml
 client = InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.1", token=HF_TOKEN)
 
-# System personality prompt
 SYSTEM_PROMPT = """
 You are a friendly and knowledgeable loan advisor. 
-Your job is to provide clear, detailed, and practical financial guidance about loans, 
-interest rates, repayment strategies, and eligibility requirements. 
-Explain things step-by-step so that even someone new to finance can understand. 
-Always be professional but approachable.
+Explain loan terms, eligibility, interest rates, and repayment strategies clearly.
 """
 
-# User input
-user_input = st.text_input("You:", "")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Generate advice
-if user_input:
+user_msg = st.text_input("You:", key="chat_input")
+
+if user_msg:
+    st.session_state.chat_history.append({"role": "user", "content": user_msg})
+
     with st.spinner("Thinking..."):
         response_text = ""
         for message in client.chat_completion(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_input}
+                *st.session_state.chat_history
             ],
-            max_tokens=512,
+            max_tokens=300,
             stream=True
         ):
             if message.choices[0].delta.content:
-                chunk = message.choices[0].delta.content
-                response_text += chunk
-                st.write(response_text)  # live update
+                response_text += message.choices[0].delta.content
 
-    # Final output
-    st.subheader("Bot:")
-    st.write(response_text)
+    st.session_state.chat_history.append({"role": "assistant", "content": response_text})
 
-# Keep chat history in session state
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-st.subheader("💬 Loan Advisor Chatbot")
-user_input = st.text_input("Ask me anything about your loan or prediction:", key="chat_input")
-
-if user_input:
-    # Add user message to history
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
-
-    # Build conversation context
-    conversation = SYSTEM_PROMPT + "\n\n"
-    for msg in st.session_state.chat_history:
-        if msg["role"] == "user":
-            conversation += f"User: {msg['content']}\n"
-        else:
-            conversation += f"Advisor: {msg['content']}\n"
-    conversation += "Advisor:"
-
-    # Get response
-    with st.spinner("Thinking..."):
-        response = chatbot(
-            conversation,
-            max_length=600,
-            temperature=0.7,
-            top_p=0.9,
-            do_sample=True
-        )[0]["generated_text"]
-
-        # Extract only the latest part of the answer
-        answer = response.split("Advisor:")[-1].strip()
-
-        # Add bot message to history
-        st.session_state.chat_history.append({"role": "advisor", "content": answer})
-
-# Display conversation history
+# Display chat
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.markdown(f"**You:** {msg['content']}")

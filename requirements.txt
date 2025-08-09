@@ -11,4 +11,6 @@ transformers
 plotly
 torch
 huggingface_hub>=0.20.3
-
+accelerate>=0.31.0
+sentencepiece>=0.2.0
+protobuf>=3.20.0

@@ -146,25 +146,71 @@ st.markdown("""
 # from transformers import pipeline
 # import streamlit as st
 
+# Cache chatbot so it loads only once
 @st.cache_resource
 def get_chatbot():
     return pipeline(
-        "text2text-generation",
-        model="google/flan-t5-base",  # more capable than small
+        "text-generation",
+        model="mistralai/Mistral-7B-Instruct-v0.1",
+        token=st.secrets["HF_TOKEN"]
     )
 
 chatbot = get_chatbot()
 
+# System role instruction
+SYSTEM_PROMPT = """
+You are a highly experienced and friendly financial loan advisor.
+Your role:
+1. Provide detailed, professional, step-by-step answers to loan-related questions.
+2. Always explain why each step matters.
+3. Include possible risks or pitfalls.
+4. Add practical tips and examples relevant to the user's situation.
+5. Maintain a conversational flow, remembering previous messages.
+Avoid repeating the user's question verbatim. Be thorough but easy to understand.
+"""
+
+# Keep chat history in session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
 st.subheader("💬 Loan Advisor Chatbot")
-user_input = st.text_input("Ask me anything about your loan or prediction:", key="chat")
+user_input = st.text_input("Ask me anything about your loan or prediction:", key="chat_input")
 
 if user_input:
-    with st.spinner("Thinking..."):
-        # Give the model better context
-        prompt = f"You are a helpful loan advisor. Answer in detail: {user_input}"
-        response = chatbot(prompt, max_length=300, do_sample=True)[0]["generated_text"]
-        st.markdown(f"**Bot:** {response}")
+    # Add user message to history
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
 
+    # Build conversation context
+    conversation = SYSTEM_PROMPT + "\n\n"
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            conversation += f"User: {msg['content']}\n"
+        else:
+            conversation += f"Advisor: {msg['content']}\n"
+    conversation += "Advisor:"
+
+    # Get response
+    with st.spinner("Thinking..."):
+        response = chatbot(
+            conversation,
+            max_length=600,
+            temperature=0.7,
+            top_p=0.9,
+            do_sample=True
+        )[0]["generated_text"]
+
+        # Extract only the latest part of the answer
+        answer = response.split("Advisor:")[-1].strip()
+
+        # Add bot message to history
+        st.session_state.chat_history.append({"role": "advisor", "content": answer})
+
+# Display conversation history
+for msg in st.session_state.chat_history:
+    if msg["role"] == "user":
+        st.markdown(f"**You:** {msg['content']}")
+    else:
+        st.markdown(f"**Bot:** {msg['content']}")
 
 # Footer
 st.markdown("---")

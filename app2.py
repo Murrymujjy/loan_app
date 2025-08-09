@@ -148,12 +148,13 @@ st.markdown("""
 
 # Cache chatbot so it loads only once
 
-chatbot = pipeline(
-    "text-generation",
-    model="mistralai/Mistral-7B-Instruct-v0.1",
-    use_auth_token=st.secrets["HF_TOKEN"]
-)
-
+@st.cache_resource
+def get_chatbot():
+    return pipeline(
+        "text-generation",
+        model="mistralai/Mistral-7B-Instruct-v0.1",
+        token=st.secrets["HF_TOKEN"]
+    )
 
 chatbot = get_chatbot()
 

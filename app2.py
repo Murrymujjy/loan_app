@@ -146,13 +146,25 @@ st.markdown("""
 import streamlit as st
 from huggingface_hub import InferenceClient
 
-# Set up the app
+import streamlit as st
+from huggingface_hub import InferenceClient
+
+# App title
 st.title("💬 Loan Advisor Chatbot")
 st.write("Ask me anything about your loan or prediction:")
 
 # Hugging Face API client
-HF_TOKEN = st.secrets["HF_TOKEN"]  # Make sure you added this in Streamlit secrets
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Put your HF token in Streamlit secrets
 client = InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.1", token=HF_TOKEN)
+
+# System personality prompt
+SYSTEM_PROMPT = """
+You are a friendly and knowledgeable loan advisor. 
+Your job is to provide clear, detailed, and practical financial guidance about loans, 
+interest rates, repayment strategies, and eligibility requirements. 
+Explain things step-by-step so that even someone new to finance can understand. 
+Always be professional but approachable.
+"""
 
 # User input
 user_input = st.text_input("You:", "")
@@ -162,31 +174,21 @@ if user_input:
     with st.spinner("Thinking..."):
         response_text = ""
         for message in client.chat_completion(
-            messages=[{"role": "user", "content": user_input}],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_input}
+            ],
             max_tokens=512,
             stream=True
         ):
             if message.choices[0].delta.content:
                 chunk = message.choices[0].delta.content
                 response_text += chunk
-                st.write(response_text)  # live updating
+                st.write(response_text)  # live update
 
-    # Final full output
+    # Final output
     st.subheader("Bot:")
     st.write(response_text)
-
-
-# System role instruction
-SYSTEM_PROMPT = """
-You are a highly experienced and friendly financial loan advisor.
-Your role:
-1. Provide detailed, professional, step-by-step answers to loan-related questions.
-2. Always explain why each step matters.
-3. Include possible risks or pitfalls.
-4. Add practical tips and examples relevant to the user's situation.
-5. Maintain a conversational flow, remembering previous messages.
-Avoid repeating the user's question verbatim. Be thorough but easy to understand.
-"""
 
 # Keep chat history in session state
 if "chat_history" not in st.session_state:

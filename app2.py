@@ -295,7 +295,7 @@ else:
                         st.rerun()
                     except Exception:
                         try:
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception:
                             pass
                 except Exception as e:

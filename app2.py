@@ -23,7 +23,7 @@ st.markdown("""
 
 # ----------------- TITLE -----------------
 st.title("💰 Loan Approval Prediction System")
-st.markdown("An intelligent system to predict loan approval using multiple ML models.")
+st.markdown("An intelligent system to predict loan approval using Random Forest and LightGBM models.")
 
 # ----------------- FEATURE DESCRIPTIONS -----------------
 with st.expander("🧠 Feature Descriptions"):
@@ -43,27 +43,24 @@ with st.expander("🧠 Feature Descriptions"):
     - **pub.rec**: Public records.
     """)
 
-# ----------------- LOAD MODELS -----------------
+# ----------------- LOAD MODELS (ONLY RF + LGBM) -----------------
 model_files = {
-    "Logistic Regression": "logistic_regression_model.joblib",
-    "Decision Tree": "decision_tree_model.joblib",
     "Random Forest": "random_forest_model.joblib",
-    "LightGBM": "lightgbm_model.joblib",
-    "XGBoost": "xgboost_model.joblib"
+    "LightGBM": "lightgbm_model.joblib"
 }
 
 models = {}
 for name, path in model_files.items():
     try:
         models[name] = joblib.load(path)
-    except Exception:
-        st.warning(f"⚠️ Could not load model file for: {name} (expected: {path})")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load model file for: {name} (expected: {path}). Error: {e}")
 
 if not models:
-    st.error("No models loaded. Put your .joblib files in the app folder and restart.")
+    st.error("No models loaded. Put 'random_forest_model.joblib' and 'lightgbm_model.joblib' in the app folder and restart.")
     st.stop()
 
-# Purpose mapping
+# Purpose mapping (you said you've been mapping already)
 purpose_mapping = {
     'credit_card': 0, 'debt_consolidation': 1, 'educational': 2,
     'home_improvement': 3, 'major_purchase': 4, 'small_business': 5,
@@ -75,14 +72,14 @@ st.sidebar.header("📋 Input Borrower Information")
 user_input = {
     "credit.policy": st.sidebar.selectbox("Credit Policy", [0, 1]),
     "purpose": st.sidebar.selectbox("Purpose", list(purpose_mapping.keys())),
-    "int.rate": st.sidebar.slider("Interest Rate", 0.0, 0.5, 0.12),
-    "installment": st.sidebar.slider("Installment", 0.0, 5000.0, 250.0),
-    "log.annual.inc": st.sidebar.slider("Log Annual Income", 0.0, 15.0, 10.0),
-    "dti": st.sidebar.slider("Debt-to-Income Ratio", 0.0, 100.0, 18.0),
-    "fico": st.sidebar.slider("FICO Score", 300, 850, 700),
-    "days.with.cr.line": st.sidebar.slider("Days with Credit Line", 0, 20000, 4000),
-    "revol.bal": st.sidebar.slider("Revolving Balance", 0, 1000000, 15000),
-    "revol.util": st.sidebar.slider("Revolving Utilization (%)", 0.0, 100.0, 45.0),
+    "int.rate": st.sidebar.slider("Interest Rate", 0.0, 0.5, 0.12, step=0.001),
+    "installment": st.sidebar.slider("Installment", 0.0, 5000.0, 250.0, step=1.0),
+    "log.annual.inc": st.sidebar.slider("Log Annual Income", 0.0, 15.0, 10.0, step=0.01),
+    "dti": st.sidebar.slider("Debt-to-Income Ratio", 0.0, 100.0, 18.0, step=0.1),
+    "fico": st.sidebar.slider("FICO Score", 300, 850, 700, step=1),
+    "days.with.cr.line": st.sidebar.slider("Days with Credit Line", 0, 20000, 4000, step=1),
+    "revol.bal": st.sidebar.slider("Revolving Balance", 0, 1000000, 15000, step=1),
+    "revol.util": st.sidebar.slider("Revolving Utilization (%)", 0.0, 100.0, 45.0, step=0.1),
     "inq.last.6mths": st.sidebar.slider("Inquiries Last 6 Months", 0, 50, 1),
     "delinq.2yrs": st.sidebar.slider("Delinquencies Last 2 Years", 0, 20, 0),
     "pub.rec": st.sidebar.slider("Public Records", 0, 20, 0)
@@ -98,67 +95,110 @@ selected_model = models[selected_model_name]
 if st.sidebar.button("Predict"):
     try:
         prediction = selected_model.predict(input_df)[0]
-        proba = selected_model.predict_proba(input_df)[0][1]
+        # handle models without predict_proba gracefully
+        if hasattr(selected_model, "predict_proba"):
+            proba = selected_model.predict_proba(input_df)[0][1]
+        else:
+            proba = None
     except Exception as e:
         st.error(f"Model prediction failed: {e}")
         st.stop()
 
     st.subheader("🎯 Prediction Result")
     st.markdown(f"**Loan Decision:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
-    st.markdown(f"**Probability of Loan Approval:** {round(proba * 100, 2)}%")
+    if proba is not None:
+        st.markdown(f"**Probability of Loan Approval:** {round(proba * 100, 2)}%")
+    else:
+        st.info("Model does not expose probability scores.")
 
-    # Gauge Chart
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=round(proba * 100, 2),
-        title={'text': "Approval Probability"},
-        gauge={'axis': {'range': [None, 100]},
-               'bar': {'color': "green" if proba >= 0.5 else "red"},
-               'steps': [
-                   {'range': [0, 50], 'color': '#ffdddd'},
-                   {'range': [50, 100], 'color': '#ddffdd'}]}))
-    st.plotly_chart(fig, use_container_width=True)
+    # Gauge Chart (show only if probability available)
+    if proba is not None:
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=round(proba * 100, 2),
+            title={'text': "Approval Probability"},
+            gauge={'axis': {'range': [None, 100]},
+                   'bar': {'color': "green" if proba >= 0.5 else "red"},
+                   'steps': [
+                       {'range': [0, 50], 'color': '#ffdddd'},
+                       {'range': [50, 100], 'color': '#ddffdd'}]}))
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ----------------- SHAP Explanation (LightGBM & XGBoost only) -----------------
+    # ----------------- EXPLANATIONS -----------------
     try:
         model_type = type(selected_model).__name__.lower()
 
-        if ("lightgbm" in model_type) or ("lgbm" in model_type) or ("xgb" in model_type) or ("xgboost" in model_type):
-            # Use TreeExplainer for tree models
-            explainer = shap.TreeExplainer(selected_model)
-            # depending on model, shap_values may be list (binary)
-            shap_values = explainer.shap_values(input_df if ("xgb" in model_type or "xgboost" in model_type) else input_df.to_numpy())
+        # ---- LightGBM: SHAP TreeExplainer (mean-abs bar) ----
+        if "lightgbm" in model_type or "lgbm" in model_type:
+            try:
+                explainer = shap.TreeExplainer(selected_model)
+                # TreeExplainer can accept DataFrame or numpy depending on model; try DataFrame first
+                shap_values = explainer.shap_values(input_df)
+                # shap_values may be list (binary)
+                if isinstance(shap_values, list) and len(shap_values) >= 2:
+                    shap_vals_pos = shap_values[1]
+                else:
+                    shap_vals_pos = shap_values
 
-            if isinstance(shap_values, list) and len(shap_values) >= 2:
-                shap_vals_pos = shap_values[1]
-            else:
-                shap_vals_pos = shap_values
+                # feature names try model first then input_df
+                if hasattr(selected_model, "feature_names_in_"):
+                    feature_names = np.array(selected_model.feature_names_in_)
+                else:
+                    feature_names = np.array(input_df.columns)
 
-            # compute mean absolute shap for each feature
-            feature_importance = np.abs(shap_vals_pos).mean(axis=0)
-            feature_names = np.array(input_df.columns)
+                feature_importance = np.abs(shap_vals_pos).mean(axis=0)
+                order = np.argsort(feature_importance)[::-1]
+                feature_importance = feature_importance[order]
+                feature_names_ordered = feature_names[order]
 
-            # sort desc
-            order = np.argsort(feature_importance)[::-1]
-            feature_importance = feature_importance[order]
-            feature_names = feature_names[order]
+                # Plot horizontal SHAP mean-abs bar
+                fig, ax = plt.subplots(figsize=(8, max(3, len(feature_names_ordered) * 0.35)))
+                ax.barh(feature_names_ordered, feature_importance, color="skyblue")
+                ax.set_xlabel("Mean |SHAP value|")
+                ax.set_title("Feature importance (SHAP — mean absolute) — LightGBM")
+                ax.invert_yaxis()
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.clf()
+            except Exception as e_shap:
+                st.warning(f"SHAP explanation not available for LightGBM. Error: {e_shap}")
 
-            # plot horizontal bar chart
-            fig, ax = plt.subplots(figsize=(8, max(3, len(feature_names)*0.4)))
-            ax.barh(feature_names, feature_importance, color="skyblue")
-            ax.set_xlabel("Mean |SHAP value|")
-            ax.set_title("Feature importance (SHAP — mean absolute)")
-            ax.invert_yaxis()
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.clf()
+        # ---- Random Forest: feature_importances_ bar (top N) ----
+        elif "randomforest" in model_type or "forest" in model_type:
+            try:
+                if not hasattr(selected_model, "feature_importances_"):
+                    raise AttributeError("Model has no attribute 'feature_importances_'")
+
+                importances = np.array(selected_model.feature_importances_)
+                # get feature names from model if present else from input_df (best-effort)
+                if hasattr(selected_model, "feature_names_in_"):
+                    feature_names = np.array(selected_model.feature_names_in_)
+                else:
+                    feature_names = np.array(input_df.columns)
+
+                # if more features, show top N
+                TOP_N = min(10, len(feature_names))
+                order = np.argsort(importances)[::-1][:TOP_N]
+                importances_sorted = importances[order]
+                feature_names_sorted = feature_names[order]
+
+                fig, ax = plt.subplots(figsize=(8, max(3, len(feature_names_sorted) * 0.35)))
+                ax.barh(feature_names_sorted, importances_sorted, color="steelblue")
+                ax.set_xlabel("Feature importance")
+                ax.set_title(f"Feature importance (Random Forest) — top {len(feature_names_sorted)}")
+                ax.invert_yaxis()
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.clf()
+            except Exception as e_rf:
+                st.warning(f"Random Forest explanation not available. Error: {e_rf}")
+
         else:
-            st.info("SHAP explanation is available only for LightGBM and XGBoost in this app. Select one of those models for SHAP visuals.")
+            st.info("Explanations available for LightGBM (SHAP) and Random Forest (feature_importances_).")
     except Exception as e:
-        st.warning(f"SHAP explanation not available. Error: {e}")
+        st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# Hugging Face Inference client
 HF_API_TOKEN = st.secrets.get("HF_API_TOKEN", None)
 if HF_API_TOKEN is None:
     st.error("❌ Missing HF_API_TOKEN in Streamlit Secrets! Add it (key name: HF_API_TOKEN).")
@@ -166,7 +206,6 @@ if HF_API_TOKEN is None:
 
 client = InferenceClient(token=HF_API_TOKEN)
 
-# Preferred models (tries in order)
 PREFERRED_MODELS = [
     "mistralai/Mistral-7B-Instruct-v0.1",
     "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -175,10 +214,8 @@ PREFERRED_MODELS = [
 ]
 
 def get_available_model():
-    """Return first model from preferred list that supports chat_completion for this token."""
     for model in PREFERRED_MODELS:
         try:
-            # small test call, short tokens
             client.chat_completion(
                 model=model,
                 messages=[{"role": "user", "content": "ping"}],
@@ -189,7 +226,6 @@ def get_available_model():
             continue
     return None
 
-# cache the working model in session
 if "hf_chat_model" not in st.session_state:
     st.session_state.hf_chat_model = get_available_model()
 
@@ -220,7 +256,6 @@ else:
                         max_tokens=300,
                         temperature=0.7
                     )
-                    # safe access
                     bot_reply = completion.choices[0].message["content"] if hasattr(completion, "choices") and completion.choices else "No response."
                     st.markdown(f"**Bot:** {bot_reply}")
                 except Exception as e:
@@ -230,24 +265,21 @@ else:
     with tab2:
         st.markdown("### Conversation (multi-turn, session only)")
 
-        # initialize conversation history with a system prompt
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = [
                 {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."}
             ]
 
-        # Display history excluding system message
+        # Render conversation (skip system line)
         for msg in st.session_state.chat_history[1:]:
             if msg["role"] == "user":
                 st.markdown(f"**You:** {msg['content']}")
             elif msg["role"] == "assistant":
                 st.markdown(f"**Bot:** {msg['content']}")
 
-        # Input and send
         multi_input = st.text_input("You:", key="multi_input")
         if st.button("Send", key="send_multi"):
             if multi_input.strip():
-                # append user message
                 st.session_state.chat_history.append({"role": "user", "content": multi_input})
                 try:
                     completion = client.chat_completion(
@@ -257,10 +289,15 @@ else:
                         temperature=0.7
                     )
                     bot_reply = completion.choices[0].message["content"] if hasattr(completion, "choices") and completion.choices else "No response."
-                    # append assistant reply
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
-                    # rerender to show new messages (input will persist unless cleared explicitly)
-                    st.rerun()
+                    # rerun to show updated history; support both APIs
+                    try:
+                        st.rerun()
+                    except Exception:
+                        try:
+                            st.experimental_rerun()
+                        except Exception:
+                            pass
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 

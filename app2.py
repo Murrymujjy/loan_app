@@ -260,7 +260,7 @@ else:
                     # append assistant reply
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
                     # rerender to show new messages (input will persist unless cleared explicitly)
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 

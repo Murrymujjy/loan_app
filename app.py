@@ -1,102 +1,248 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import joblib
 import shap
+import plotly.graph_objects as go
+from huggingface_hub import InferenceClient
+import traceback
 import matplotlib.pyplot as plt
+import numpy as np
 
-# from sklearn.preprocessing import LabelEncoder
+# ----------------- CONFIG -----------------
+st.set_page_config(page_title="Loan Approval Predictor", layout="wide")
 
-# Load models
-logreg = joblib.load("logistic_regression_model.joblib")
-dt = joblib.load("decision_tree_model.joblib")
-rf = joblib.load("random_forest_model.joblib")
-lgbm = joblib.load("lightgbm_model.joblib")
-xgb = joblib.load("xgboost_model.joblib")
-
-
-st.set_page_config(page_title="Loan Default Prediction", layout="wide")
-
-st.title("📊 Loan Default Risk Prediction App")
-
+# Background and styling
 st.markdown("""
-This application uses 5 machine learning models to predict whether a loan will be fully paid or defaulted based on user input.
-""")
+    <style>
+    body { background-color: #f5f7fa; color: #333; }
+    .main { background-color: #ffffff; border-radius: 10px; padding: 2rem;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .stApp { padding: 2rem; }
+    </style>
+""", unsafe_allow_html=True)
 
-with st.form("loan_form"):
-    st.subheader("Enter Loan Applicant Information")
+# ----------------- TITLE -----------------
+st.title("💰 Loan Approval Prediction System")
+st.markdown("An intelligent system to predict loan approval using multiple ML models.")
 
-    col1, col2, col3 = st.columns(3)
+# ----------------- FEATURE DESCRIPTIONS -----------------
+with st.expander("🧠 Feature Descriptions"):
+    st.markdown("""
+    - **credit.policy**: 1 if the customer meets the credit underwriting criteria.
+    - **purpose**: Purpose of the loan (debt consolidation, educational, etc.).
+    - **int.rate**: Interest rate of the loan.
+    - **installment**: Monthly payment for the loan.
+    - **log.annual.inc**: Log of annual income.
+    - **dti**: Debt-to-income ratio.
+    - **fico**: FICO credit score.
+    - **days.with.cr.line**: Days with credit line open.
+    - **revol.bal**: Revolving balance.
+    - **revol.util**: Revolving utilization rate.
+    - **inq.last.6mths**: Inquiries in last 6 months.
+    - **delinq.2yrs**: Delinquencies in last 2 years.
+    - **pub.rec**: Public records.
+    """)
 
-    with col1:
-        credit_policy = st.selectbox("Credit Policy (1: Meets policy)", [0, 1])
-        purpose = st.selectbox("Loan Purpose", ['debt_consolidation', 'credit_card', 'all_other', 'home_improvement', 'small_business', 'major_purchase'])
-        int_rate = st.number_input("Interest Rate", value=0.12)
-        installment = st.number_input("Installment", value=300.0)
+# ----------------- LOAD MODELS -----------------
+model_files = {
+    "Logistic Regression": "logistic_regression_model.joblib",
+    "Decision Tree": "decision_tree_model.joblib",
+    "Random Forest": "random_forest_model.joblib",
+    "LightGBM": "lightgbm_model.joblib",
+    "XGBoost": "xgboost_model.joblib"
+}
 
-    with col2:
-        log_annual_inc = st.number_input("Log Annual Income", value=10.5)
-        dti = st.number_input("Debt-to-Income Ratio (DTI)", value=15.0)
-        fico = st.number_input("FICO Score", min_value=300, max_value=850, value=720)
-        days_with_cr_line = st.number_input("Days With Credit Line", value=2000)
+models = {}
+for name, path in model_files.items():
+    try:
+        models[name] = joblib.load(path)
+    except:
+        st.warning(f"⚠️ Could not load model: {name}")
 
-    with col3:
-        revol_bal = st.number_input("Revolving Balance", value=15000)
-        revol_util = st.number_input("Revolving Utilization (%)", value=50.0)
-        inq_last_6mths = st.number_input("Inquiries Last 6 Months", value=1)
-        delinq_2yrs = st.number_input("Delinquencies in Last 2 Years", value=0)
-        pub_rec = st.number_input("Public Records", value=0)
+# Purpose mapping
+purpose_mapping = {
+    'credit_card': 0, 'debt_consolidation': 1, 'educational': 2,
+    'home_improvement': 3, 'major_purchase': 4, 'small_business': 5,
+    'all_other': 6
+}
 
-    submitted = st.form_submit_button("Predict")
+# ----------------- SIDEBAR INPUT -----------------
+st.sidebar.header("📋 Input Borrower Information")
+user_input = {
+    "credit.policy": st.sidebar.selectbox("Credit Policy", [0, 1]),
+    "purpose": st.sidebar.selectbox("Purpose", list(purpose_mapping.keys())),
+    "int.rate": st.sidebar.slider("Interest Rate", 0.05, 0.30, 0.12),
+    "installment": st.sidebar.slider("Installment", 50.0, 1000.0, 250.0),
+    "log.annual.inc": st.sidebar.slider("Log Annual Income", 8.0, 12.0, 10.0),
+    "dti": st.sidebar.slider("Debt-to-Income Ratio", 0.0, 40.0, 18.0),
+    "fico": st.sidebar.slider("FICO Score", 300, 850, 700),
+    "days.with.cr.line": st.sidebar.slider("Days with Credit Line", 1000, 8000, 4000),
+    "revol.bal": st.sidebar.slider("Revolving Balance", 0, 100000, 15000),
+    "revol.util": st.sidebar.slider("Revolving Utilization (%)", 0.0, 100.0, 45.0),
+    "inq.last.6mths": st.sidebar.slider("Inquiries Last 6 Months", 0, 10, 1),
+    "delinq.2yrs": st.sidebar.slider("Delinquencies Last 2 Years", 0, 5, 0),
+    "pub.rec": st.sidebar.slider("Public Records", 0, 5, 0)
+}
 
-if submitted:
-    # Encode categorical feature
-    purpose_encoded = purpose_encoder.transform([purpose])[0]
+input_df = pd.DataFrame([user_input])
+input_df['purpose'] = input_df['purpose'].map(purpose_mapping)
 
-    # Create input DataFrame
-    input_data = pd.DataFrame([[
-        credit_policy, purpose_encoded, int_rate, installment,
-        log_annual_inc, dti, fico, days_with_cr_line,
-        revol_bal, revol_util, inq_last_6mths, delinq_2yrs, pub_rec
-    ]], columns=[
-        'credit.policy', 'purpose', 'int.rate', 'installment', 'log.annual.inc',
-        'dti', 'fico', 'days.with.cr.line', 'revol.bal', 'revol.util',
-        'inq.last.6mths', 'delinq.2yrs', 'pub.rec'
-    ])
+# ----------------- PREDICTION -----------------
+selected_model_name = st.sidebar.selectbox("Select Model", list(models.keys()))
+selected_model = models[selected_model_name]
 
-    # Prediction from models
-    st.subheader("📈 Predictions")
-    models = {
-        "Logistic Regression": logreg,
-        "Decision Tree": dt,
-        "Random Forest": rf,
-        "LightGBM": lgbm,
-        "XGBoost": xgb
-    }
+if st.sidebar.button("Predict"):
+    prediction = selected_model.predict(input_df)[0]
+    proba = selected_model.predict_proba(input_df)[0][1]
 
-    results = {}
-    for name, model in models.items():
-        prediction = model.predict(input_data)[0]
-        prob = model.predict_proba(input_data)[0][1]  # Probability of default
-        results[name] = {"Prediction": "Default" if prediction else "Fully Paid", "Probability": prob}
+    st.subheader("🎯 Prediction Result")
+    st.markdown(f"**Loan Decision:** {'Approved ✅' if prediction == 1 else 'Rejected ❌'}")
+    st.markdown(f"**Probability of Loan Approval:** {round(proba * 100, 2)}%")
 
-    results_df = pd.DataFrame(results).T
-    st.dataframe(results_df.style.highlight_max(axis=0), use_container_width=True)
+    # Gauge Chart
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=round(proba * 100, 2),
+        title={'text': "Approval Probability"},
+        gauge={'axis': {'range': [None, 100]},
+               'bar': {'color': "green" if proba >= 0.5 else "red"},
+               'steps': [
+                   {'range': [0, 50], 'color': '#ffdddd'},
+                   {'range': [50, 100], 'color': '#ddffdd'}]}))
+    st.plotly_chart(fig, use_container_width=True)
 
-    # SHAP explanation (only one model for simplicity)
-    st.subheader("🔍 Model Explanation (SHAP)")
-    explainer = shap.TreeExplainer(rf)
-    shap_values = explainer.shap_values(input_data)
+            # ----------------- SHAP Explanation -----------------
+    try:
+        model_type = type(selected_model).__name__.lower()
 
-    st.markdown("**SHAP Feature Impact for Random Forest:**")
-    fig, ax = plt.subplots()
-    shap.bar_plot(shap_values[1], feature_names=input_data.columns)
-    st.pyplot(fig)
+        if "lightgbm" in model_type or "lgbm" in model_type or "xgb" in model_type:
+            explainer = shap.TreeExplainer(selected_model)
+            shap_values = explainer.shap_values(input_df)
 
-    # Insights Section
-    st.subheader("📌 Insights")
-    high_prob_model = max(results.items(), key=lambda x: x[1]['Probability'])
-    if high_prob_model[1]['Prediction'] == "Default":
-        st.warning(f"⚠️ Model **{high_prob_model[0]}** predicts a high risk of default with **{high_prob_model[1]['Probability']:.2f}** probability.")
-    else:
-        st.success(f"✅ Model **{high_prob_model[0]}** predicts the loan will likely be **fully paid** with **{1 - high_prob_model[1]['Probability']:.2f}** probability.")
+            # If binary classification, select class 1
+            if isinstance(shap_values, list):
+                shap_values = shap_values[1]
+
+            # Calculate mean absolute SHAP values for each feature
+            feature_importance = np.abs(shap_values).mean(axis=0)
+            feature_names = input_df.columns
+
+            # Sort features by importance
+            sorted_idx = np.argsort(feature_importance)[::-1]
+            feature_names = feature_names[sorted_idx]
+            feature_importance = feature_importance[sorted_idx]
+
+            # Plot bar chart
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.barh(feature_names, feature_importance, color="skyblue")
+            ax.set_xlabel("Mean Absolute SHAP Value")
+            ax.set_ylabel("Feature")
+            ax.set_title("Feature Importance (SHAP)")
+            ax.invert_yaxis()
+            st.pyplot(fig)
+
+        else:
+            st.info("SHAP explanation available only for LightGBM and XGBoost in this app.")
+
+    except Exception as e:
+        st.warning(f"SHAP explanation not available. Error: {e}")
+
+# ----------------- CHATBOT -----------------
+import streamlit as st
+from huggingface_hub import InferenceClient
+
+# Set your HF API key in Streamlit secrets or env variable
+HF_API_TOKEN = st.secrets["HF_API_TOKEN"]
+client = InferenceClient(token=HF_API_TOKEN)
+
+# Preferred models list (will try in this order)
+PREFERRED_MODELS = [
+    "mistralai/Mistral-7B-Instruct-v0.1",
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    "meta-llama/Llama-2-13b-chat-hf",
+    "tiiuae/falcon-7b-instruct"
+]
+
+def get_available_model():
+    """Check which preferred model works for chat completion."""
+    for model in PREFERRED_MODELS:
+        try:
+            client.chat_completion(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=5
+            )
+            return model
+        except:
+            continue
+    return None
+
+# Cache working model
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = get_available_model()
+
+if not st.session_state.selected_model:
+    st.error("❌ No available chat models found from the preferred list.")
+else:
+    model_name = st.session_state.selected_model
+    st.info(f"✅ Using model: **{model_name}**")
+
+    # Tabs for single-turn and multi-turn
+    tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
+
+    with tab1:
+        st.markdown("### Single-Turn Loan Advisor")
+        user_input = st.text_input("Ask me anything about loans, eligibility, or financial planning:")
+
+        if user_input:
+            try:
+                completion = client.chat_completion(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."},
+                        {"role": "user", "content": user_input}
+                    ],
+                    max_tokens=300,
+                    temperature=0.7
+                )
+                bot_reply = completion.choices[0].message["content"]
+                st.markdown(f"**Bot:** {bot_reply}")
+            except Exception as e:
+                st.error(f"⚠️ Error: {e}")
+
+    with tab2:
+        st.markdown("### Multi-Turn Loan Advisor")
+
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."}
+            ]
+
+        user_message = st.text_input("You:", key="multi_input")
+
+        if st.button("Send", key="send_multi"):
+            if user_message.strip():
+                st.session_state.chat_history.append({"role": "user", "content": user_message})
+                try:
+                    completion = client.chat_completion(
+                        model=model_name,
+                        messages=st.session_state.chat_history,
+                        max_tokens=300,
+                        temperature=0.7
+                    )
+                    bot_reply = completion.choices[0].message["content"]
+                    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+                except Exception as e:
+                    st.error(f"⚠️ Error: {e}")
+
+        # Display chat history
+        for msg in st.session_state.chat_history:
+            if msg["role"] == "user":
+                st.markdown(f"**You:** {msg['content']}")
+            elif msg["role"] == "assistant":
+                st.markdown(f"**Bot:** {msg['content']}")
+
+
+# Footer
+st.markdown("---")
+st.markdown("<center>Made with ❤️ by Team Numerixa</center>", unsafe_allow_html=True)

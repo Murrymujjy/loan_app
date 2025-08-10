@@ -111,14 +111,17 @@ if st.sidebar.button("Predict"):
                    {'range': [50, 100], 'color': '#ddffdd'}]}))
     st.plotly_chart(fig, use_container_width=True)
 
-    # ----------------- SHAP Explanation -----------------
+        # ----------------- SHAP Explanation -----------------
     try:
         model_type = type(selected_model).__name__.lower()
 
         if "lightgbm" in model_type or "lgbm" in model_type:
             explainer = shap.TreeExplainer(selected_model)
             shap_values = explainer.shap_values(input_df.to_numpy())
-        elif "xgb" in model_type or "tree" in model_type or "forest" in model_type:
+        elif "xgb" in model_type or "xgboost" in model_type:
+            explainer = shap.TreeExplainer(selected_model)
+            shap_values = explainer.shap_values(input_df)
+        elif "randomforest" in model_type or "decisiontree" in model_type:
             explainer = shap.TreeExplainer(selected_model)
             shap_values = explainer.shap_values(input_df)
         elif "logistic" in model_type or "linear" in model_type:
@@ -129,8 +132,12 @@ if st.sidebar.button("Predict"):
             shap_values = explainer.shap_values(input_df)
 
         st.markdown("**Top Features Impacting the Decision:**")
-        if isinstance(shap_values, list):  # Binary classification returns list
+
+        # If it's a binary classification, shap_values might be a list
+        if isinstance(shap_values, list):
             shap_values = shap_values[1]
+
+        # Plot SHAP bar chart for all models (same style as LightGBM/XGBoost)
         shap.summary_plot(shap_values, input_df, plot_type="bar", show=False)
         st.pyplot(plt.gcf(), bbox_inches="tight")
         plt.clf()

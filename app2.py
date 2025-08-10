@@ -111,36 +111,38 @@ if st.sidebar.button("Predict"):
                    {'range': [50, 100], 'color': '#ddffdd'}]}))
     st.plotly_chart(fig, use_container_width=True)
 
-        # ----------------- SHAP Explanation -----------------
+            # ----------------- SHAP Explanation -----------------
     try:
         model_type = type(selected_model).__name__.lower()
 
-        if "lightgbm" in model_type or "lgbm" in model_type:
-            explainer = shap.TreeExplainer(selected_model)
-            shap_values = explainer.shap_values(input_df.to_numpy())
-        elif "xgb" in model_type or "xgboost" in model_type:
+        if "lightgbm" in model_type or "lgbm" in model_type or "xgb" in model_type:
             explainer = shap.TreeExplainer(selected_model)
             shap_values = explainer.shap_values(input_df)
-        elif "randomforest" in model_type or "decisiontree" in model_type:
-            explainer = shap.TreeExplainer(selected_model)
-            shap_values = explainer.shap_values(input_df)
-        elif "logistic" in model_type or "linear" in model_type:
-            explainer = shap.LinearExplainer(selected_model, input_df, feature_perturbation="interventional")
-            shap_values = explainer.shap_values(input_df)
+
+            # If binary classification, select class 1
+            if isinstance(shap_values, list):
+                shap_values = shap_values[1]
+
+            # Calculate mean absolute SHAP values for each feature
+            feature_importance = np.abs(shap_values).mean(axis=0)
+            feature_names = input_df.columns
+
+            # Sort features by importance
+            sorted_idx = np.argsort(feature_importance)[::-1]
+            feature_names = feature_names[sorted_idx]
+            feature_importance = feature_importance[sorted_idx]
+
+            # Plot bar chart
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.barh(feature_names, feature_importance, color="skyblue")
+            ax.set_xlabel("Mean Absolute SHAP Value")
+            ax.set_ylabel("Feature")
+            ax.set_title("Feature Importance (SHAP)")
+            ax.invert_yaxis()
+            st.pyplot(fig)
+
         else:
-            explainer = shap.KernelExplainer(selected_model.predict_proba, shap.sample(input_df, 1))
-            shap_values = explainer.shap_values(input_df)
-
-        st.markdown("**Top Features Impacting the Decision:**")
-
-        # If it's a binary classification, shap_values might be a list
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]
-
-        # Plot SHAP bar chart for all models (same style as LightGBM/XGBoost)
-        shap.summary_plot(shap_values, input_df, plot_type="bar", show=False)
-        st.pyplot(plt.gcf(), bbox_inches="tight")
-        plt.clf()
+            st.info("SHAP explanation available only for LightGBM and XGBoost in this app.")
 
     except Exception as e:
         st.warning(f"SHAP explanation not available. Error: {e}")

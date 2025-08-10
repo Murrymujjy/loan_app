@@ -167,20 +167,17 @@ def get_available_model():
     """Check which preferred model works for chat completion."""
     for model in PREFERRED_MODELS:
         try:
-            # Try a test message with very low max_tokens to check availability
             client.chat_completion(
                 model=model,
                 messages=[{"role": "user", "content": "ping"}],
                 max_tokens=5
             )
             return model
-        except StopIteration:
-            continue
-        except Exception as e:
+        except:
             continue
     return None
 
-# Cache the working model so we don't check every time
+# Cache working model
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = get_available_model()
 
@@ -190,24 +187,60 @@ else:
     model_name = st.session_state.selected_model
     st.info(f"✅ Using model: **{model_name}**")
 
-    st.markdown("### 💬 Loan Advisor Chatbot")
-    user_input = st.text_input("Ask me anything about loans, eligibility, or financial planning:")
+    # Tabs for single-turn and multi-turn
+    tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
 
-    if user_input:
-        try:
-            completion = client.chat_completion(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."},
-                    {"role": "user", "content": user_input}
-                ],
-                max_tokens=300,
-                temperature=0.7
-            )
-            bot_reply = completion.choices[0].message["content"]
-            st.markdown(f"**Bot:** {bot_reply}")
-        except Exception as e:
-            st.error(f"⚠️ Error: {e}")
+    with tab1:
+        st.markdown("### Single-Turn Loan Advisor")
+        user_input = st.text_input("Ask me anything about loans, eligibility, or financial planning:")
+
+        if user_input:
+            try:
+                completion = client.chat_completion(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."},
+                        {"role": "user", "content": user_input}
+                    ],
+                    max_tokens=300,
+                    temperature=0.7
+                )
+                bot_reply = completion.choices[0].message["content"]
+                st.markdown(f"**Bot:** {bot_reply}")
+            except Exception as e:
+                st.error(f"⚠️ Error: {e}")
+
+    with tab2:
+        st.markdown("### Multi-Turn Loan Advisor")
+
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."}
+            ]
+
+        user_message = st.text_input("You:", key="multi_input")
+
+        if st.button("Send", key="send_multi"):
+            if user_message.strip():
+                st.session_state.chat_history.append({"role": "user", "content": user_message})
+                try:
+                    completion = client.chat_completion(
+                        model=model_name,
+                        messages=st.session_state.chat_history,
+                        max_tokens=300,
+                        temperature=0.7
+                    )
+                    bot_reply = completion.choices[0].message["content"]
+                    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+                except Exception as e:
+                    st.error(f"⚠️ Error: {e}")
+
+        # Display chat history
+        for msg in st.session_state.chat_history:
+            if msg["role"] == "user":
+                st.markdown(f"**You:** {msg['content']}")
+            elif msg["role"] == "assistant":
+                st.markdown(f"**Bot:** {msg['content']}")
 
 
 # Footer

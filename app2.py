@@ -199,7 +199,7 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
+
 HF_API_TOKEN = st.secrets.get("HF_API_TOKEN", None)
 if HF_API_TOKEN is None:
     st.error("❌ Missing HF_API_TOKEN in Streamlit Secrets! Add it (key name: HF_API_TOKEN).")
@@ -208,7 +208,7 @@ if HF_API_TOKEN is None:
 client = InferenceClient(token=HF_API_TOKEN)
 
 # Make sure this is a list, not a string
-PREFERRED_MODELS = ["HuggingFaceH4/zephyr-7b-beta"]
+PREFERRED_MODELS = ["https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1"]
 
 def get_available_model():
     for model in PREFERRED_MODELS:

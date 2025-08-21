@@ -208,7 +208,11 @@ if HF_API_TOKEN is None:
 client = InferenceClient(token=HF_API_TOKEN)
 
 # Make sure this is a list, not a string
-PREFERRED_MODELS = ["https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1"]
+PREFERRED_MODELS = [
+    "HuggingFaceH4/zephyr-7b-beta",   # preferred
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",  
+    "meta-llama/Llama-2-7b-chat-hf"
+]
 
 def get_available_model():
     for model in PREFERRED_MODELS:

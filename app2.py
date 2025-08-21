@@ -199,6 +199,7 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
+# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
 HF_API_TOKEN = st.secrets.get("HF_API_TOKEN", None)
 if HF_API_TOKEN is None:
     st.error("❌ Missing HF_API_TOKEN in Streamlit Secrets! Add it (key name: HF_API_TOKEN).")
@@ -206,7 +207,13 @@ if HF_API_TOKEN is None:
 
 client = InferenceClient(token=HF_API_TOKEN)
 
-PREFERRED_MODELS = "HuggingFaceH4/zephyr-7b-beta"
+# Make this a list (supports multiple fallback models if needed)
+PREFERRED_MODELS = [
+    "HuggingFaceH4/zephyr-7b-beta",
+    "mistralai/Mistral-7B-Instruct-v0.2",
+    "HuggingFaceH4/zephyr-7b-alpha"
+]
+
 def get_available_model():
     for model in PREFERRED_MODELS:
         try:
@@ -227,10 +234,10 @@ st.markdown("---")
 st.header("💬 Loan Advisor Chatbot")
 
 if not st.session_state.hf_chat_model:
-    st.error("No available HF chat models from the preferred list. Check token / model access.")
+    st.error("⚠️ No available HF chat models from the preferred list. Please check your Hugging Face token or model access.")
 else:
     model_name = st.session_state.hf_chat_model
-    st.info(f"Using chat model: **{model_name}**")
+    st.info(f"✅ Using chat model: **{model_name}**")
 
     tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
 
@@ -264,7 +271,6 @@ else:
                 {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."}
             ]
 
-        # Render conversation (skip system line)
         for msg in st.session_state.chat_history[1:]:
             if msg["role"] == "user":
                 st.markdown(f"**You:** {msg['content']}")
@@ -284,17 +290,14 @@ else:
                     )
                     bot_reply = completion.choices[0].message["content"] if hasattr(completion, "choices") and completion.choices else "No response."
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
-                    # rerun to show updated history; support both APIs
                     try:
                         st.rerun()
                     except Exception:
-                        try:
-                            st.rerun()
-                        except Exception:
-                            pass
+                        pass
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 
 # Footer
 st.markdown("---")
 st.markdown("<center>Made with ❤️ by Team Numerixa</center>", unsafe_allow_html=True)
+

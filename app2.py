@@ -207,10 +207,9 @@ if HF_API_TOKEN is None:
 client = InferenceClient(token=HF_API_TOKEN)
 
 PREFERRED_MODELS = [
-    "mistralai/Mistral-7B-Instruct-v0.1",
-    "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "tiiuae/falcon-7b-instruct"
+    "HuggingFaceH4/zephyr-7b-beta",
+    "microsoft/Phi-3-mini-4k-instruct",
+    "google/gemma-2b-it"
 ]
 
 def get_available_model():

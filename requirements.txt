@@ -4,7 +4,7 @@ joblib
 shap
 plotly
 huggingface_hub>=0.23.0
-scikit-learn
+scikit-learn==1.6.1
 lightgbm
 xgboost
 matplotlib

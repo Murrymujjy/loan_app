@@ -213,22 +213,38 @@ def get_available_model():
     hf_token = st.secrets.get("HUGGINGFACE_TOKEN", None)
     if not hf_token:
         st.error("❌ Missing HUGGINGFACE_TOKEN in Streamlit Secrets!")
-        st.stop()
+        st.stop()from huggingface_hub import InferenceClient
 
-    for model in CHAT_MODELS:
+# Updated preferred models list (free / open ones included)
+PREFERRED_MODELS = [
+    "mistralai/Mistral-7B-Instruct-v0.2",   # good free instruct model
+    "google/gemma-2b-it",                   # smaller, free, works with text generation
+    "HuggingFaceH4/zephyr-7b-beta",         # keep it, but may need PRO
+    "tiiuae/falcon-7b-instruct",  
+    "meta-llama/Llama-2-7b-chat-hf"
+]
+
+def load_chat_model():
+    for model_id in PREFERRED_MODELS:
         try:
-            client = InferenceClient(model=model, token=hf_token)
-            # quick chat test
-            _ = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5
-            )
-            return model
+            print(f"🔄 Trying {model_id}...")
+            client = InferenceClient(model=model_id, token=st.secrets["HF_TOKEN"])
+
+            # Test with a small prompt
+            test = client.text_generation("Hello! This is a quick test.", max_new_tokens=10)
+            print(f"✅ Model {model_id} is available")
+            return client, model_id
         except Exception as e:
-            st.warning(f"⚠️ Model {model} failed: {e}")
+            print(f"⚠️ Model {model_id} failed: {e}")
             continue
-    return None
+    return None, None
+
+chat_client, active_model = load_chat_model()
+
+if chat_client is None:
+    st.error("⚠️ No available HF chat models. Please check your Hugging Face token or model access.")
+else:
+    st.success(f"💬 Loan Advisor Chatbot is running on: {active_model}")
 
 if "hf_chat_model" not in st.session_state:
     st.session_state.hf_chat_model = get_available_model()

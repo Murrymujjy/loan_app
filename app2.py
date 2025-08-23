@@ -199,29 +199,26 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
+# ----------------- CHATBOT (Zephyr conversational) -----------------
 
 from huggingface_hub import InferenceClient
 
-# List of models to try in order
-PREFERRED_MODELS = [
-    "HuggingFaceH4/zephyr-7b-beta",   # preferred
-    "tiiuae/falcon-7b-instruct",
-    "meta-llama/Llama-2-7b-chat-hf"
+CHAT_MODELS = [
+    "HuggingFaceH4/zephyr-7b-beta",  # conversational-only
 ]
 
 def get_available_model():
-    """Try preferred models in order and return the first that works."""
+    """Return first available model from CHAT_MODELS"""
     hf_token = st.secrets.get("HUGGINGFACE_TOKEN", None)
     if not hf_token:
         st.error("❌ Missing HUGGINGFACE_TOKEN in Streamlit Secrets!")
         st.stop()
 
-    for model in PREFERRED_MODELS:
+    for model in CHAT_MODELS:
         try:
             client = InferenceClient(model=model, token=hf_token)
-            # quick test
-            _ = client.text_generation("ping", max_new_tokens=5)
+            # quick conversational test
+            _ = client.conversational(messages=[{"role": "user", "content": "ping"}])
             return model
         except Exception as e:
             st.warning(f"⚠️ Model {model} failed: {e}")
@@ -235,7 +232,7 @@ st.markdown("---")
 st.header("💬 Loan Advisor Chatbot")
 
 if not st.session_state.hf_chat_model:
-    st.error("⚠️ No available HF chat models from the preferred list. Please check your Hugging Face token or model access.")
+    st.error("⚠️ No available HF chat models. Please check your Hugging Face token or model access.")
 else:
     model_name = st.session_state.hf_chat_model
     client = InferenceClient(model=model_name, token=st.secrets["HUGGINGFACE_TOKEN"])
@@ -250,11 +247,10 @@ else:
         if st.button("Ask", key="single_ask"):
             if single_q.strip():
                 try:
-                    response = client.text_generation(
-                        f"You are a helpful loan advisor. {single_q}",
-                        max_new_tokens=300
+                    response = client.conversational(
+                        messages=[{"role": "user", "content": f"You are a helpful loan advisor. {single_q}"}]
                     )
-                    st.markdown(f"**Bot:** {response.strip()}")
+                    st.markdown(f"**Bot:** {response.generated_text.strip()}")
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 
@@ -276,13 +272,8 @@ else:
             if multi_input.strip():
                 st.session_state.chat_history.append({"role": "user", "content": multi_input})
                 try:
-                    # Concatenate history into a single prompt
-                    conversation = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history])
-                    response = client.text_generation(
-                        f"You are a helpful loan advisor.\n{conversation}\nassistant:",
-                        max_new_tokens=300
-                    )
-                    bot_reply = response.strip()
+                    response = client.conversational(messages=st.session_state.chat_history)
+                    bot_reply = response.generated_text.strip()
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
                     st.rerun()
                 except Exception as e:
@@ -291,4 +282,3 @@ else:
 # Footer
 st.markdown("---")
 st.markdown("<center>Made with ❤️ by Team Numerixa</center>", unsafe_allow_html=True)
-

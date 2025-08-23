@@ -199,12 +199,13 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT (Zephyr conversational) -----------------
-
+# ----------------- CHATBOT (Zephyr / LLaMA / Falcon) -----------------
 from huggingface_hub import InferenceClient
 
 CHAT_MODELS = [
-    "HuggingFaceH4/zephyr-7b-beta",  # conversational-only
+    "HuggingFaceH4/zephyr-7b-beta",   # preferred
+    "tiiuae/falcon-7b-instruct",
+    "meta-llama/Llama-2-7b-chat-hf"
 ]
 
 def get_available_model():
@@ -217,8 +218,12 @@ def get_available_model():
     for model in CHAT_MODELS:
         try:
             client = InferenceClient(model=model, token=hf_token)
-            # quick conversational test
-            _ = client.conversational(messages=[{"role": "user", "content": "ping"}])
+            # quick chat test
+            _ = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=5
+            )
             return model
         except Exception as e:
             st.warning(f"⚠️ Model {model} failed: {e}")
@@ -247,10 +252,13 @@ else:
         if st.button("Ask", key="single_ask"):
             if single_q.strip():
                 try:
-                    response = client.conversational(
-                        messages=[{"role": "user", "content": f"You are a helpful loan advisor. {single_q}"}]
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": f"You are a helpful loan advisor. {single_q}"}],
+                        max_tokens=300
                     )
-                    st.markdown(f"**Bot:** {response.generated_text.strip()}")
+                    bot_reply = response.choices[0].message["content"]
+                    st.markdown(f"**Bot:** {bot_reply}")
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 
@@ -272,13 +280,17 @@ else:
             if multi_input.strip():
                 st.session_state.chat_history.append({"role": "user", "content": multi_input})
                 try:
-                    response = client.conversational(messages=st.session_state.chat_history)
-                    bot_reply = response.generated_text.strip()
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=st.session_state.chat_history,
+                        max_tokens=300
+                    )
+                    bot_reply = response.choices[0].message["content"]
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
                     st.rerun()
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 
-# Footer
 st.markdown("---")
 st.markdown("<center>Made with ❤️ by Team Numerixa</center>", unsafe_allow_html=True)
+

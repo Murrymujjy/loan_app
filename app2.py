@@ -213,7 +213,9 @@ def get_available_model():
     hf_token = st.secrets.get("HUGGINGFACE_TOKEN", None)
     if not hf_token:
         st.error("❌ Missing HUGGINGFACE_TOKEN in Streamlit Secrets!")
-        st.stop()from huggingface_hub import InferenceClient
+        st.stop()
+        
+        from huggingface_hub import InferenceClient
 
 # Updated preferred models list (free / open ones included)
 PREFERRED_MODELS = [

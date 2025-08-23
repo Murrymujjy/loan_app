@@ -199,32 +199,32 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
+# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
 
-HF_API_TOKEN = st.secrets.get("HF_API_TOKEN", None)
-if HF_API_TOKEN is None:
-    st.error("❌ Missing HF_API_TOKEN in Streamlit Secrets! Add it (key name: HF_API_TOKEN).")
-    st.stop()
+from huggingface_hub import InferenceClient
 
-client = InferenceClient(token=HF_API_TOKEN)
-
-# Make sure this is a list, not a string
+# List of models to try in order
 PREFERRED_MODELS = [
     "HuggingFaceH4/zephyr-7b-beta",   # preferred
-    "tiiuae/falcon-7b-instruct",  
+    "tiiuae/falcon-7b-instruct",
     "meta-llama/Llama-2-7b-chat-hf"
-    
 ]
 
 def get_available_model():
+    """Try preferred models in order and return the first that works."""
+    hf_token = st.secrets.get("HUGGINGFACE_TOKEN", None)
+    if not hf_token:
+        st.error("❌ Missing HUGGINGFACE_TOKEN in Streamlit Secrets!")
+        st.stop()
+
     for model in PREFERRED_MODELS:
         try:
-            client.chat_completion(
-                model=model,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5
-            )
+            client = InferenceClient(model=model, token=hf_token)
+            # quick test
+            _ = client.text_generation("ping", max_new_tokens=5)
             return model
-        except Exception:
+        except Exception as e:
+            st.warning(f"⚠️ Model {model} failed: {e}")
             continue
     return None
 
@@ -238,6 +238,7 @@ if not st.session_state.hf_chat_model:
     st.error("⚠️ No available HF chat models from the preferred list. Please check your Hugging Face token or model access.")
 else:
     model_name = st.session_state.hf_chat_model
+    client = InferenceClient(model=model_name, token=st.secrets["HUGGINGFACE_TOKEN"])
     st.info(f"✅ Using chat model: **{model_name}**")
 
     tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
@@ -249,17 +250,11 @@ else:
         if st.button("Ask", key="single_ask"):
             if single_q.strip():
                 try:
-                    completion = client.chat_completion(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": "You are a friendly, detailed loan advisor. Explain steps clearly."},
-                            {"role": "user", "content": single_q}
-                        ],
-                        max_tokens=300,
-                        temperature=0.7
+                    response = client.text_generation(
+                        f"You are a helpful loan advisor. {single_q}",
+                        max_new_tokens=300
                     )
-                    bot_reply = completion.choices[0].message["content"] if hasattr(completion, "choices") and completion.choices else "No response."
-                    st.markdown(f"**Bot:** {bot_reply}")
+                    st.markdown(f"**Bot:** {response.strip()}")
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 
@@ -268,11 +263,9 @@ else:
         st.markdown("### Conversation (multi-turn, session only)")
 
         if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                {"role": "system", "content": "You are a helpful financial loan advisor. Give detailed, practical advice with clear steps."}
-            ]
+            st.session_state.chat_history = []
 
-        for msg in st.session_state.chat_history[1:]:
+        for msg in st.session_state.chat_history:
             if msg["role"] == "user":
                 st.markdown(f"**You:** {msg['content']}")
             elif msg["role"] == "assistant":
@@ -283,18 +276,15 @@ else:
             if multi_input.strip():
                 st.session_state.chat_history.append({"role": "user", "content": multi_input})
                 try:
-                    completion = client.chat_completion(
-                        model=model_name,
-                        messages=st.session_state.chat_history,
-                        max_tokens=300,
-                        temperature=0.7
+                    # Concatenate history into a single prompt
+                    conversation = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history])
+                    response = client.text_generation(
+                        f"You are a helpful loan advisor.\n{conversation}\nassistant:",
+                        max_new_tokens=300
                     )
-                    bot_reply = completion.choices[0].message["content"] if hasattr(completion, "choices") and completion.choices else "No response."
+                    bot_reply = response.strip()
                     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
-                    try:
-                        st.rerun()
-                    except Exception:
-                        pass
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Chat error: {type(e).__name__}: {e}")
 

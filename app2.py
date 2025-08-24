@@ -206,6 +206,7 @@ CHAT_MODELS = [
     "google/gemma-2b-it",                     # small, instruction-tuned
     "mistralai/Mistral-7B-Instruct-v0.2",     # open instruct model
     "microsoft/phi-2",
+    "deepseek-ai/DeepSeek-R1-0528"
 ]
 
 def get_available_model():

@@ -203,9 +203,9 @@ if st.sidebar.button("Predict"):
 from huggingface_hub import InferenceClient
 
 CHAT_MODELS = [
-    "HuggingFaceH4/zephyr-7b-beta",   # preferred
-    "tiiuae/falcon-7b-instruct",
-    "meta-llama/Llama-2-7b-chat-hf"
+    "google/gemma-2b-it",                     # small, instruction-tuned
+    "mistralai/Mistral-7B-Instruct-v0.2",     # open instruct model
+    "microsoft/phi-2",
 ]
 
 def get_available_model():

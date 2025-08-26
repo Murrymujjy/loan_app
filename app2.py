@@ -199,68 +199,88 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT (Zephyr / LLaMA / Falcon) -----------------
-from huggingface_hub import InferenceClient
+import streamlit as st
 
-CHAT_MODELS = [
-    "google/gemma-2b-it",                     # small, instruction-tuned
-    "mistralai/Mistral-7B-Instruct-v0.2",     # open instruct model
-    "microsoft/phi-2",
-    "deepseek-ai/DeepSeek-R1-0528"
-]
+# ---- GEMINI (Default) ----
+import google.generativeai as genai
 
-def get_available_model():
-    """Return first available model from CHAT_MODELS"""
-    hf_token = st.secrets.get("HUGGINGFACE_TOKEN", None)
-    if not hf_token:
-        st.error("❌ Missing HUGGINGFACE_TOKEN in Streamlit Secrets!")
-        st.stop()
-        
-        from huggingface_hub import InferenceClient
+# ---- DEEPSEEK (Fallback) ----
+from together import Together
 
-# Updated preferred models list (free / open ones included)
-PREFERRED_MODELS = [
-    "mistralai/Mistral-7B-Instruct-v0.2",   # good free instruct model
-    "google/gemma-2b-it",                   # smaller, free, works with text generation
-    "HuggingFaceH4/zephyr-7b-beta",         # keep it, but may need PRO
-    "tiiuae/falcon-7b-instruct",  
-    "meta-llama/Llama-2-7b-chat-hf"
-]
+# ---- OPENROUTER (Fallback) ----
+import openai
 
-def load_chat_model():
-    for model_id in PREFERRED_MODELS:
+# ===============================
+# CONFIG
+# ===============================
+# Load secrets from Streamlit Cloud (add them in st.secrets)
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
+TOGETHER_KEY = st.secrets.get("TOGETHER_API_KEY")
+OPENROUTER_KEY = st.secrets.get("OPENROUTER_API_KEY")
+
+# Init clients
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+if TOGETHER_KEY:
+    together_client = Together(api_key=TOGETHER_KEY)
+
+if OPENROUTER_KEY:
+    openai.api_key = OPENROUTER_KEY
+    openai.api_base = "https://openrouter.ai/api/v1"
+
+# ===============================
+# CHATBOT RESPONSE HANDLER
+# ===============================
+def chatbot_response(prompt):
+    # Try Gemini First
+    if GEMINI_KEY:
         try:
-            print(f"🔄 Trying {model_id}...")
-            client = InferenceClient(model=model_id, token=st.secrets["HF_TOKEN"])
-
-            # Test with a small prompt
-            test = client.text_generation("Hello! This is a quick test.", max_new_tokens=10)
-            print(f"✅ Model {model_id} is available")
-            return client, model_id
+            response = gemini_model.generate_content(prompt)
+            return response.text
         except Exception as e:
-            print(f"⚠️ Model {model_id} failed: {e}")
-            continue
-    return None, None
+            st.warning(f"⚠️ Gemini failed: {e}")
 
-chat_client, active_model = load_chat_model()
+    # Try DeepSeek via Together
+    if TOGETHER_KEY:
+        try:
+            response = together_client.chat.completions.create(
+                model="deepseek-ai/deepseek-coder-7b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=250,
+            )
+            return response.choices[0].message["content"]
+        except Exception as e:
+            st.warning(f"⚠️ DeepSeek failed: {e}")
 
-if chat_client is None:
-    st.error("⚠️ No available HF chat models. Please check your Hugging Face token or model access.")
-else:
-    st.success(f"💬 Loan Advisor Chatbot is running on: {active_model}")
+    # Try OpenRouter
+    if OPENROUTER_KEY:
+        try:
+            response = openai.ChatCompletion.create(
+                model="mistralai/Mixtral-8x7B-Instruct-v0.1",  # or any OpenRouter-supported model
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response["choices"][0]["message"]["content"]
+        except Exception as e:
+            st.warning(f"⚠️ OpenRouter failed: {e}")
 
-if "hf_chat_model" not in st.session_state:
-    st.session_state.hf_chat_model = get_available_model()
+    # If all fail
+    return "❌ No available models. Please check your API keys or subscription."
 
-st.markdown("---")
-st.header("💬 Loan Advisor Chatbot")
 
-if not st.session_state.hf_chat_model:
-    st.error("⚠️ No available HF chat models. Please check your Hugging Face token or model access.")
-else:
-    model_name = st.session_state.hf_chat_model
-    client = InferenceClient(model=model_name, token=st.secrets["HUGGINGFACE_TOKEN"])
-    st.info(f"✅ Using chat model: **{model_name}**")
+# ===============================
+# STREAMLIT UI
+# ===============================
+st.title("💬 Loan Advisor Chatbot")
+
+user_input = st.text_input("Ask me about loans:")
+
+if user_input:
+    with st.spinner("Thinking..."):
+        response = chatbot_response(user_input)
+    st.write(response)
+
 
     tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
 

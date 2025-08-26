@@ -3,7 +3,9 @@ pandas
 joblib
 shap
 plotly
-huggingface_hub>=0.23.0
+google
+gemini
+openrouter ai
 scikit-learn==1.6.1
 lightgbm
 xgboost

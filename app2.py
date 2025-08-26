@@ -199,88 +199,105 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-import streamlit as st
-
-# ---- GEMINI (Default) ----
+# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
 import google.generativeai as genai
-
-# ---- DEEPSEEK (Fallback) ----
 from together import Together
-
-# ---- OPENROUTER (Fallback) ----
 import openai
 
 # ===============================
 # CONFIG
 # ===============================
-# Load secrets from Streamlit Cloud (add them in st.secrets)
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
 TOGETHER_KEY = st.secrets.get("TOGETHER_API_KEY")
 OPENROUTER_KEY = st.secrets.get("OPENROUTER_API_KEY")
 
-# Init clients
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
+# Together client for DeepSeek
+together_client = None
 if TOGETHER_KEY:
     together_client = Together(api_key=TOGETHER_KEY)
 
-if OPENROUTER_KEY:
-    openai.api_key = OPENROUTER_KEY
-    openai.api_base = "https://openrouter.ai/api/v1"
+# OpenRouter client for fallback
+openai.api_key = OPENROUTER_KEY
+openai.api_base = "https://openrouter.ai/api/v1"
 
 # ===============================
-# CHATBOT RESPONSE HANDLER
+# RESPONSE HANDLER
 # ===============================
-def chatbot_response(prompt):
-    # Try Gemini First
+def chatbot_response(user_input, history=[]):
+    """
+    Try Gemini first → then DeepSeek (Together) → then OpenRouter fallback.
+    """
+    # 1. Try Gemini
     if GEMINI_KEY:
         try:
-            response = gemini_model.generate_content(prompt)
-            return response.text
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            chat = model.start_chat(history=[])
+            resp = chat.send_message(user_input)
+            return resp.text
         except Exception as e:
-            st.warning(f"⚠️ Gemini failed: {e}")
+            st.warning(f"Gemini failed: {e}")
 
-    # Try DeepSeek via Together
-    if TOGETHER_KEY:
+    # 2. Try DeepSeek via Together
+    if together_client:
         try:
-            response = together_client.chat.completions.create(
-                model="deepseek-ai/deepseek-coder-7b-instruct",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=250,
+            resp = together_client.chat.completions.create(
+                model="deepseek-ai/deepseek-llm-7b-chat",
+                messages=[
+                    {"role": "system", "content": "You are a helpful loan advisor."},
+                    {"role": "user", "content": user_input},
+                ]
             )
-            return response.choices[0].message["content"]
+            return resp.choices[0].message["content"]
         except Exception as e:
-            st.warning(f"⚠️ DeepSeek failed: {e}")
+            st.warning(f"DeepSeek failed: {e}")
 
-    # Try OpenRouter
+    # 3. Fallback to OpenRouter (Mistral, LLaMA, etc.)
     if OPENROUTER_KEY:
         try:
-            response = openai.ChatCompletion.create(
-                model="mistralai/Mixtral-8x7B-Instruct-v0.1",  # or any OpenRouter-supported model
-                messages=[{"role": "user", "content": prompt}],
+            resp = openai.ChatCompletion.create(
+                model="mistralai/mistral-7b-instruct",  # or another OpenRouter-supported model
+                messages=[
+                    {"role": "system", "content": "You are a helpful loan advisor."},
+                    {"role": "user", "content": user_input},
+                ]
             )
-            return response["choices"][0]["message"]["content"]
+            return resp.choices[0].message["content"]
         except Exception as e:
-            st.warning(f"⚠️ OpenRouter failed: {e}")
+            st.warning(f"OpenRouter failed: {e}")
 
-    # If all fail
-    return "❌ No available models. Please check your API keys or subscription."
+    return "⚠️ No available models. Please check your API keys."
 
 
 # ===============================
-# STREAMLIT UI
+# CHATBOT UI
 # ===============================
-st.title("💬 Loan Advisor Chatbot")
+with st.expander("💬 Loan Advisor Chatbot"):
+    tab1, tab2 = st.tabs(["Single-turn Q&A", "Multi-turn Chat"])
 
-user_input = st.text_input("Ask me about loans:")
+    # --- Single-turn
+    with tab1:
+        user_q = st.text_input("Ask a question about loans:")
+        if st.button("Ask", key="single_turn"):
+            if user_q:
+                st.info(chatbot_response(user_q))
 
-if user_input:
-    with st.spinner("Thinking..."):
-        response = chatbot_response(user_input)
-    st.write(response)
+    # --- Multi-turn
+    with tab2:
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
+        user_msg = st.text_input("Your message:", key="multi_turn")
+        if st.button("Send", key="multi_turn_btn"):
+            if user_msg:
+                reply = chatbot_response(user_msg, st.session_state.chat_history)
+                st.session_state.chat_history.append(("You", user_msg))
+                st.session_state.chat_history.append(("Bot", reply))
+
+        for sender, msg in st.session_state.chat_history:
+            st.write(f"**{sender}:** {msg}")
 
     tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
 

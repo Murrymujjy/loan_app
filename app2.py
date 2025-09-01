@@ -199,76 +199,57 @@ if st.sidebar.button("Predict"):
         st.warning(f"Explanation block failed: {e}")
 
 # ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-import google.generativeai as genai
-from together import Together
-import openai
+# ----------------- CHATBOT -----------------
+import os
+import requests
+from requests.exceptions import RequestException
 
-# ===============================
-# CONFIG
-# ===============================
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
-TOGETHER_KEY = st.secrets.get("TOGETHER_API_KEY")
-OPENROUTER_KEY = st.secrets.get("OPENROUTER_API_KEY")
+# Load the Hugging Face API token from Streamlit secrets
+HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY")
 
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+if not HUGGINGFACE_API_KEY:
+    st.warning("⚠️ Hugging Face API key not found. Please add it to your Streamlit secrets.")
+    st.stop()
 
-# Together client for DeepSeek
-together_client = None
-if TOGETHER_KEY:
-    together_client = Together(api_key=TOGETHER_KEY)
+# Hugging Face model endpoint for a free, powerful model
+MODEL_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
 
-# OpenRouter client for fallback
-openai.api_key = OPENROUTER_KEY
-openai.api_base = "https://openrouter.ai/api/v1"
+def query_model(payload):
+    try:
+        response = requests.post(MODEL_URL, headers=headers, json=payload)
+        response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+        return response.json()
+    except RequestException as e:
+        st.error(f"Error communicating with the Hugging Face API: {e}")
+        return None
 
-# ===============================
-# RESPONSE HANDLER
-# ===============================
-def chatbot_response(user_input, history=[]):
-    """
-    Try Gemini first → then DeepSeek (Together) → then OpenRouter fallback.
-    """
-    # 1. Try Gemini
-    if GEMINI_KEY:
-        try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            chat = model.start_chat(history=[])
-            resp = chat.send_message(user_input)
-            return resp.text
-        except Exception as e:
-            st.warning(f"Gemini failed: {e}")
+with st.expander("💬 Loan Advisor Chatbot"):
+    st.markdown("### Ask the AI Loan Advisor")
+    user_input = st.text_input("Ask a question about loans or credit:")
 
-    # 2. Try DeepSeek via Together
-    if together_client:
-        try:
-            resp = together_client.chat.completions.create(
-                model="deepseek-ai/deepseek-llm-7b-chat",
-                messages=[
-                    {"role": "system", "content": "You are a helpful loan advisor."},
-                    {"role": "user", "content": user_input},
-                ]
-            )
-            return resp.choices[0].message["content"]
-        except Exception as e:
-            st.warning(f"DeepSeek failed: {e}")
-
-    # 3. Fallback to OpenRouter (Mistral, LLaMA, etc.)
-    if OPENROUTER_KEY:
-        try:
-            resp = openai.ChatCompletion.create(
-                model="mistralai/mistral-7b-instruct",  # or another OpenRouter-supported model
-                messages=[
-                    {"role": "system", "content": "You are a helpful loan advisor."},
-                    {"role": "user", "content": user_input},
-                ]
-            )
-            return resp.choices[0].message["content"]
-        except Exception as e:
-            st.warning(f"OpenRouter failed: {e}")
-
-    return "⚠️ No available models. Please check your API keys."
+    if st.button("Get Advice", key="chat_btn"):
+        if user_input.strip():
+            with st.spinner("Thinking..."):
+                # Define the system prompt for the model
+                system_prompt = "You are a helpful and professional AI loan advisor. You provide clear, concise, and friendly advice on loan-related topics."
+                
+                # Construct the full prompt following the Mistral instruction format
+                full_prompt = f"<s>[INST] {system_prompt}\n{user_input} [/INST]"
+                
+                output = query_model({
+                    "inputs": full_prompt,
+                    "parameters": {"max_new_tokens": 250},
+                })
+                
+                if output and isinstance(output, list) and 'generated_text' in output[0]:
+                    response_text = output[0]['generated_text']
+                    # The model output includes the input prompt, so we need to clean it
+                    cleaned_response = response_text.split("[/INST]")[-1].strip()
+                    st.success("Here's your advice:")
+                    st.info(cleaned_response)
+                else:
+                    st.error("Could not get a response from the model. Please try again.")
 
 
 # ===============================

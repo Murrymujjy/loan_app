@@ -210,7 +210,7 @@ if not HUGGINGFACE_API_KEY:
 
 # Initialize the Hugging Face Inference Client
 # Use a model known to be stable on the free tier
-client = InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.1", token=HUGGINGFACE_API_KEY)
+client = InferenceClient(model="meta-llama/Llama-2-7b-chat-hf", token=HUGGINGFACE_API_KEY)
 
 with st.expander("💬 Loan Advisor Chatbot"):
     st.markdown("### Ask the AI Loan Advisor")

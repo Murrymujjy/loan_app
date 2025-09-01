@@ -198,19 +198,21 @@ if st.sidebar.button("Predict"):
     except Exception as e:
         st.warning(f"Explanation block failed: {e}")
 
-# ----------------- CHATBOT (Official Hugging Face Client) -----------------
-from huggingface_hub import InferenceClient
+# ----------------- CHATBOT (Google Gemini) -----------------
+import google.generativeai as genai
 
-# Load the Hugging Face API token from Streamlit secrets
-HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY")
+# Load the Google API key from Streamlit secrets
+GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
 
-if not HUGGINGFACE_API_KEY:
-    st.warning("⚠️ Hugging Face API key not found. Please add it to your Streamlit secrets.")
+if not GOOGLE_API_KEY:
+    st.warning("⚠️ Google API key not found. Please add it to your Streamlit secrets.")
     st.stop()
 
-# Initialize the Hugging Face Inference Client
-# Use a model known to be stable on the free tier
-client = InferenceClient(model="meta-llama/Llama-2-7b-chat-hf", token=HUGGINGFACE_API_KEY, timeout=120)
+# Configure the Gemini API
+genai.configure(api_key=GOOGLE_API_KEY)
+
+# Initialize the generative model
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 with st.expander("💬 Loan Advisor Chatbot"):
     st.markdown("### Ask the AI Loan Advisor")
@@ -220,14 +222,14 @@ with st.expander("💬 Loan Advisor Chatbot"):
         if user_input.strip():
             with st.spinner("Thinking..."):
                 try:
-                    response = client.text_generation(
-                        prompt=f"You are a helpful loan advisor. Provide clear and concise advice. {user_input}",
-                        max_new_tokens=250,
+                    # Generate a response from the model
+                    response = model.generate_content(
+                        f"You are a helpful loan advisor. Provide clear and concise advice. {user_input}"
                     )
                     st.success("Here's your advice:")
-                    st.info(response)
+                    st.info(response.text)
                 except Exception as e:
-                    st.error(f"Error communicating with the Hugging Face API: {e}")
+                    st.error(f"Error communicating with the Google API: {e}")
                     
 # ===============================
 # CHATBOT UI

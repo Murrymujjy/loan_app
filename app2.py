@@ -212,7 +212,7 @@ if not HUGGINGFACE_API_KEY:
     st.stop()
 
 # Hugging Face model endpoint for a free, powerful model
-MODEL_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+MODEL_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
 headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
 
 def query_model(payload):

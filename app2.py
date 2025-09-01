@@ -254,31 +254,6 @@ with st.expander("💬 Loan Advisor Chatbot"):
 
 # ===============================
 # CHATBOT UI
-# ===============================
-with st.expander("💬 Loan Advisor Chatbot"):
-    tab1, tab2 = st.tabs(["Single-turn Q&A", "Multi-turn Chat"])
-
-    # --- Single-turn
-    with tab1:
-        user_q = st.text_input("Ask a question about loans:")
-        if st.button("Ask", key="single_turn"):
-            if user_q:
-                st.info(chatbot_response(user_q))
-
-    # --- Multi-turn
-    with tab2:
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
-
-        user_msg = st.text_input("Your message:", key="multi_turn")
-        if st.button("Send", key="multi_turn_btn"):
-            if user_msg:
-                reply = chatbot_response(user_msg, st.session_state.chat_history)
-                st.session_state.chat_history.append(("You", user_msg))
-                st.session_state.chat_history.append(("Bot", reply))
-
-        for sender, msg in st.session_state.chat_history:
-            st.write(f"**{sender}:** {msg}")
 
     tab1, tab2 = st.tabs(["💬 Single-Turn Chat", "🗨️ Multi-Turn Chat"])
 

@@ -198,11 +198,8 @@ if st.sidebar.button("Predict"):
     except Exception as e:
         st.warning(f"Explanation block failed: {e}")
 
-# ----------------- CHATBOT (Single-turn + Multi-turn tabs) -----------------
-# ----------------- CHATBOT -----------------
-import os
-import requests
-from requests.exceptions import RequestException
+# ----------------- CHATBOT (Official Hugging Face Client) -----------------
+from huggingface_hub import InferenceClient
 
 # Load the Hugging Face API token from Streamlit secrets
 HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY")
@@ -211,18 +208,9 @@ if not HUGGINGFACE_API_KEY:
     st.warning("⚠️ Hugging Face API key not found. Please add it to your Streamlit secrets.")
     st.stop()
 
-# Hugging Face model endpoint for a free, powerful model
-MODEL_URL = "https://api-inference.huggingface.co/models/openchat/openchat-3.5-0106"
-headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-
-def query_model(payload):
-    try:
-        response = requests.post(MODEL_URL, headers=headers, json=payload)
-        response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
-        return response.json()
-    except RequestException as e:
-        st.error(f"Error communicating with the Hugging Face API: {e}")
-        return None
+# Initialize the Hugging Face Inference Client
+# Use a model known to be stable on the free tier
+client = InferenceClient(model="HuggingFaceH4/zephyr-7b-beta", token=HUGGINGFACE_API_KEY)
 
 with st.expander("💬 Loan Advisor Chatbot"):
     st.markdown("### Ask the AI Loan Advisor")
@@ -231,27 +219,16 @@ with st.expander("💬 Loan Advisor Chatbot"):
     if st.button("Get Advice", key="chat_btn"):
         if user_input.strip():
             with st.spinner("Thinking..."):
-                # Define the system prompt for the model
-                system_prompt = "You are a helpful and professional AI loan advisor. You provide clear, concise, and friendly advice on loan-related topics."
-                
-                # Construct the full prompt following the Mistral instruction format
-                full_prompt = f"<s>[INST] {system_prompt}\n{user_input} [/INST]"
-                
-                output = query_model({
-                    "inputs": full_prompt,
-                    "parameters": {"max_new_tokens": 250},
-                })
-                
-                if output and isinstance(output, list) and 'generated_text' in output[0]:
-                    response_text = output[0]['generated_text']
-                    # The model output includes the input prompt, so we need to clean it
-                    cleaned_response = response_text.split("[/INST]")[-1].strip()
+                try:
+                    response = client.text_generation(
+                        prompt=f"You are a helpful loan advisor. Provide clear and concise advice. {user_input}",
+                        max_new_tokens=250,
+                    )
                     st.success("Here's your advice:")
-                    st.info(cleaned_response)
-                else:
-                    st.error("Could not get a response from the model. Please try again.")
-
-
+                    st.info(response)
+                except Exception as e:
+                    st.error(f"Error communicating with the Hugging Face API: {e}")
+                    
 # ===============================
 # CHATBOT UI
 
